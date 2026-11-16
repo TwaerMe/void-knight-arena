@@ -25,8 +25,8 @@ jobs:
 
       - name: Download Custom Font
         run: |
-          mkdir assets\fonts -Force
-          curl -L -f --retry 3 "https://github.com/google/fonts/raw/main/ofl/exo2/Exo2%5Bwght%5D.ttf" -o assets\fonts\AstralFont.ttf || echo "Fallback to system font"
+          New-Item -ItemType Directory -Force -Path assets\fonts | Out-Null
+          curl.exe -L -f --retry 3 "https://github.com/google/fonts/raw/main/ofl/exo2/Exo2%5Bwght%5D.ttf" -o assets\fonts\AstralFont.ttf
 
       - name: Generate 2K Textures, HD Sprites & Stereo Audio
         run: |
