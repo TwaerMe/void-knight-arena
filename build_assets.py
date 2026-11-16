@@ -184,7 +184,7 @@ def generate_sfx(sfx_dir):
 
 
 def _create_gradient_2k(w, h, c1, c2, accent):
-    """Векторный рендер 2K неба с туманностями и звёздной пылью (~14.7 МБ на слой)."""
+    """Векторный рендер 2K неба с туманностями без зависимости от дисплея."""
     y = np.linspace(0.0, 1.0, h, dtype=np.float32)[:, None]
     x = np.linspace(0.0, 1.0, w, dtype=np.float32)[None, :]
 
@@ -192,7 +192,6 @@ def _create_gradient_2k(w, h, c1, c2, accent):
     g = c1[1] + (c2[1] - c1[1]) * y
     b = c1[2] + (c2[2] - c1[2]) * y
 
-    # Мягкое астральное свечение туманности
     nebula = np.exp(-((x - 0.5) ** 2 / 0.09 + (y - 0.38) ** 2 / 0.08))
     wave = 0.5 + 0.5 * np.sin(x * 11.0 + np.cos(y * 7.0) * 2.5)
     glow = nebula * wave * 0.45
@@ -203,7 +202,7 @@ def _create_gradient_2k(w, h, c1, c2, accent):
     a = np.full((h, w), 255, dtype=np.uint8)
 
     rgba = np.dstack((r, g, b, a))
-    return pygame.image.frombuffer(rgba.tobytes(), (w, h), "RGBA").convert_alpha()
+    return pygame.image.frombuffer(rgba.tobytes(), (w, h), "RGBA")
 
 
 def generate_biomes_2k(bg_dir):
@@ -222,7 +221,7 @@ def generate_biomes_2k(bg_dir):
             pygame.draw.circle(sky, (235, 245, 255, rng.randint(90, 230)), (sx, sy), sr)
         pygame.image.save(sky, os.path.join(bg_dir, f"{bid}_sky.tga"))
 
-        # 2. Far Parallax 2K (горные шпили, астролябия, древние руины)
+        # 2. Far Parallax 2K
         far = pygame.Surface((w, h), pygame.SRCALPHA)
         cx, cy = w // 2, 430
         pygame.draw.circle(far, (*biome["stone_rim"], 130), (cx, cy), 280, 4)
@@ -241,13 +240,12 @@ def generate_biomes_2k(bg_dir):
             pygame.draw.line(far, (*biome["stone_rim"], 120), (bx + 95, peak_y), (bx + 165, peak_y + 75), 2)
         pygame.image.save(far, os.path.join(bg_dir, f"{bid}_far.tga"))
 
-        # 3. Mid Parallax 2K (готические арки и витражные розы)
+        # 3. Mid Parallax 2K
         mid = pygame.Surface((w, h), pygame.SRCALPHA)
         for px in range(180, w, 460):
             pygame.draw.rect(mid, (*biome["stone_dark"], 245), (px - 48, 0, 96, h))
             pygame.draw.line(mid, (*biome["stone_rim"], 170), (px - 48, 0), (px - 48, h), 3)
             pygame.draw.line(mid, (*biome["stone_rim"], 110), (px + 48, 0), (px + 48, h), 2)
-            # Капитель и арка
             pygame.draw.polygon(mid, (*biome["stone_mid"], 245), [(px - 68, 180), (px + 68, 180), (px + 48, 240), (px - 48, 240)])
             wx = px + 230
             if wx < w - 120:
@@ -260,7 +258,7 @@ def generate_biomes_2k(bg_dir):
 
         # 4. Volumetric Light Rays & Mist 2K
         mist = pygame.Surface((w, h), pygame.SRCALPHA)
-        for idx, rx in enumerate((380, 920, 1520, 2080)):
+        for rx in (380, 920, 1520, 2080):
             pts = [(rx - 70, 0), (rx + 110, 0), (rx + 420, h), (rx + 90, h)]
             pygame.draw.polygon(mist, (*biome["ray_col"], 22), pts)
         pygame.image.save(mist, os.path.join(bg_dir, f"{bid}_mist.tga"))
@@ -275,7 +273,6 @@ def generate_biomes_2k(bg_dir):
                 rx = (tx + off) % fw
                 pygame.draw.rect(fl, (*biome["stone_mid"], 255), (rx + 4, ty + 4, 248, 120), border_radius=10)
                 pygame.draw.rect(fl, (*biome["stone_rim"], 135), (rx + 4, ty + 4, 248, 120), 2, border_radius=10)
-                # Светящаяся руна внутри плиты
                 cx_r, cy_r = rx + 128, ty + 64
                 pygame.draw.polygon(fl, (*biome["accent"], 95), [(cx_r, cy_r - 18), (cx_r + 14, cy_r), (cx_r, cy_r + 18), (cx_r - 14, cy_r)], 2)
         pygame.image.save(fl, os.path.join(bg_dir, f"{bid}_floor.tga"))
@@ -284,7 +281,7 @@ def generate_biomes_2k(bg_dir):
 def generate_hd_sprites(spr_dir):
     os.makedirs(spr_dir, exist_ok=True)
 
-    # 1. Герой: 8 кадров 512x512 (~8 МБ)
+    # 1. Герой: 8 кадров 512x512
     for f in range(8):
         sz = 512
         s = pygame.Surface((sz, sz), pygame.SRCALPHA)
@@ -293,36 +290,31 @@ def generate_hd_sprites(spr_dir):
         bob = int(math.sin(phase * 2.0) * 10)
         leg_a = int(math.sin(phase) * 46)
 
-        # Ноги и поножи
         pygame.draw.line(s, (22, 30, 52), (cx - 26, 330 + bob), (cx - 34 - leg_a, 488), 34)
         pygame.draw.line(s, (34, 46, 76), (cx + 26, 330 + bob), (cx + 34 + leg_a, 488), 34)
         pygame.draw.circle(s, (105, 235, 255), (cx + 34 + leg_a, 475), 10)
 
-        # Плащ и кираса
         torso = [(cx, 175 + bob), (cx + 96, 245 + bob), (cx + 72, 395 + bob), (cx - 72, 395 + bob), (cx - 96, 245 + bob)]
         pygame.draw.polygon(s, (20, 28, 48), torso)
         pygame.draw.polygon(s, (85, 215, 250), torso, 8)
         pygame.draw.polygon(s, (165, 248, 255), [(cx, 235 + bob), (cx + 26, 285 + bob), (cx, 335 + bob), (cx - 26, 285 + bob)])
 
-        # Наплечники
         for side in (-1, 1):
             sh = [(cx + side * 112, 215 + bob), (cx + side * 46, 182 + bob), (cx + side * 82, 275 + bob)]
             pygame.draw.polygon(s, (44, 60, 94), sh)
             pygame.draw.polygon(s, (145, 240, 255), sh, 5)
 
-        # Шлем и астральные рога
         helm = [(cx, 44 + bob), (cx + 82, 114 + bob), (cx + 64, 198 + bob), (cx - 64, 198 + bob), (cx - 82, 114 + bob)]
         pygame.draw.polygon(s, (234, 244, 255), helm)
         pygame.draw.polygon(s, (115, 175, 225), helm, 7)
         pygame.draw.polygon(s, (245, 250, 255), [(cx - 56, 94 + bob), (cx - 104, 12 + bob), (cx - 32, 66 + bob)])
         pygame.draw.polygon(s, (245, 250, 255), [(cx + 56, 94 + bob), (cx + 104, 12 + bob), (cx + 32, 66 + bob)])
 
-        # Светящийся визор
         pygame.draw.polygon(s, (12, 16, 28), [(cx - 44, 122 + bob), (cx + 58, 122 + bob), (cx + 42, 162 + bob), (cx - 32, 162 + bob)])
         pygame.draw.line(s, (115, 245, 255), (cx - 34, 142 + bob), (cx + 46, 142 + bob), 14)
         pygame.image.save(s, os.path.join(spr_dir, f"hero_{f}.tga"))
 
-    # 2. 5 типов врагов: по 2 кадра 512x512 (~10 МБ)
+    # 2. 5 типов врагов: по 2 кадра 512x512
     enemy_kinds = ["sentinel", "prism_drone", "aegis_warden", "nova_orb", "rift_assassin"]
     for ek in enemy_kinds:
         for f in range(2):
@@ -361,7 +353,7 @@ def generate_hd_sprites(spr_dir):
 
             pygame.image.save(s, os.path.join(spr_dir, f"enemy_{ek}_{f}.tga"))
 
-    # 3. 6 Боссов: по 4 кадра 1024x1024 (24 * 4 МБ = 96 МБ)
+    # 3. 6 Боссов: по 4 кадра 1024x1024
     for bkind, _, prim, glow, _ in BOSS_DEFS:
         for f in range(4):
             sz = 1024
