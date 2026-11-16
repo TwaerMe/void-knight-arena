@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build Astral Knight EXE
 
 on:
   push:
@@ -25,10 +25,10 @@ jobs:
 
       - name: Build EXE with PyInstaller
         run: |
-          pyinstaller --onefile --noconsole --name "VoidKnightArena" main.py
+          pyinstaller --onefile --noconsole --name "AstralKnight" main.py
 
       - name: Upload EXE Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VoidKnightArena-Windows
-          path: dist/VoidKnightArena.exe
+          name: AstralKnight-Windows
+          path: dist/AstralKnight.exe
