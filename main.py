@@ -1,10 +1,13 @@
 import math
+import os
 import random
 import sys
 import pygame
 from data import WIDTH, HEIGHT, FPS, FLOOR_Y, BIOMES, WEAPONS, RELICS, SYNERGIES, BLESSINGS, BOSS_DEFS
-from gfx import get_font, BloomRenderer, SpriteBank, SparkParticle, RingWave, WeatherParticle, FloatingText, build_sky_surface, draw_world_backdrop, draw_reflective_floor
+from gfx import resource_path, get_font, AssetLibrary, BloomRenderer, SparkParticle, RingWave, WeatherParticle, FloatingText, draw_world_backdrop, draw_reflective_floor
 from entities import Platform, CrystalHazard, LumenCluster, LumenCrystal, Shockwave, Projectile, LaserBeam, AstralArtBlast, Hero, Enemy, Boss
+from sfx import SoundManager
+import build_assets
 
 
 def build_room(depth, room_idx):
@@ -48,12 +51,11 @@ def build_room(depth, room_idx):
     return "boss", platforms, hazards, clusters, enemies, None
 
 
-def draw_hud(surf, hero, boss, depth, room_idx, biome):
+def draw_hud(surf, hero, boss, depth, room_idx, biome, fps_val, sfx):
     f_title = get_font(21, bold=True)
     f_small = get_font(16)
     f_tiny = get_font(14)
 
-    # Сфера Эфира
     sc = (56, 54)
     pygame.draw.circle(surf, (16, 22, 38), sc, 33)
     ratio = hero.aether / hero.max_aether
@@ -62,7 +64,6 @@ def draw_hud(surf, hero, boss, depth, room_idx, biome):
         pygame.draw.circle(surf, (235, 252, 255), sc, int(16 * math.sqrt(ratio)))
     pygame.draw.circle(surf, (175, 215, 245), sc, 33, 3)
 
-    # Ячейки прочности (Ромбы HP)
     for i in range(hero.max_hp):
         mx = 114 + i * 31
         my = 36
@@ -74,7 +75,6 @@ def draw_hud(surf, hero, boss, depth, room_idx, biome):
         else:
             pygame.draw.polygon(surf, (45, 56, 82), pts, 2)
 
-    # Люмен + Поток + Оружие
     pygame.draw.polygon(surf, (215, 250, 255), [(114, 68), (121, 76), (114, 84), (107, 76)])
     surf.blit(f_title.render(f"{hero.lumen}", True, (240, 248, 255)), (130, 63))
 
@@ -86,16 +86,16 @@ def draw_hud(surf, hero, boss, depth, room_idx, biome):
     pygame.draw.rect(surf, tier_cols[t_idx], (rx, ry, int(rw * (hero.resonance / 100.0)), 10), border_radius=5)
     surf.blit(f_small.render(f"{tier_names[t_idx]} ({hero.combo_count})", True, tier_cols[t_idx]), (rx + rw + 10, 65))
 
-    # Активное оружие
     w_txt = f_small.render(f"[{hero.weapon['key']}] {hero.weapon['name']}", True, hero.weapon["color"])
-    surf.blit(w_txt, (560, 65))
+    surf.blit(w_txt, (555, 65))
 
     stage_names = ["Святилище", "Зал I", "Зал II", "Чертог Босса"]
-    loc_txt = f_small.render(f"Этаж {depth}: {biome['name']}  |  {stage_names[room_idx]}", True, (205, 222, 248))
-    surf.blit(loc_txt, (WIDTH - loc_txt.get_width() - 26, 22))
+    vol_str = "OFF" if sfx.muted else f"{int(sfx.volume * 100)}%"
+    loc_txt = f_small.render(f"Этаж {depth}: {biome['name']}  |  {stage_names[room_idx]}  |  {int(fps_val)} FPS  |  Звук [M]: {vol_str}", True, (205, 222, 248))
+    surf.blit(loc_txt, (WIDTH - loc_txt.get_width() - 24, 22))
 
-    ctrl_txt = f_tiny.render("1/2/3: Оружие  |  ЛКМ/J: Атака  |  ПКМ/Shift: Рывок  |  СКМ/Q: Парирование  |  E: Искусство  |  F: Лечение  |  TAB: Меню", True, (135, 155, 185))
-    surf.blit(ctrl_txt, (WIDTH - ctrl_txt.get_width() - 26, 46))
+    ctrl_txt = f_tiny.render("1-3: Оружие  |  ЛКМ/J: Атака  |  ПКМ/Shift: Рывок  |  СКМ/Q: Парирование  |  E: Искусство  |  F: Лечение  |  TAB: Меню", True, (135, 155, 185))
+    surf.blit(ctrl_txt, (WIDTH - ctrl_txt.get_width() - 24, 46))
 
     if boss and boss.hp > 0:
         bw, bh = 740, 16
@@ -135,7 +135,6 @@ def draw_blessing_draft(surf, choices, selected_idx):
         t_img = f_card.render(f"[{i + 1}] {bl['name']}", True, (245, 250, 255))
         surf.blit(t_img, (card.centerx - t_img.get_width() // 2, cy + 150))
 
-        # Перенос текста описания по строкам
         words = bl["desc"].split()
         lines, line = [], ""
         for w in words:
@@ -176,7 +175,6 @@ def draw_altar_menu(surf, hero, tab_idx, selected_idx, at_altar, defeated_bosses
     pygame.draw.line(surf, (48, 64, 96), (panel.left + 22, panel.top + 92), (panel.right - 22, panel.top + 92), 2)
 
     if tab_idx == 0:
-        # 16 реликвий в 2 колонки по 8
         for idx, rel in enumerate(RELICS):
             col_i = idx % 2
             row_i = idx // 2
@@ -252,14 +250,18 @@ def draw_altar_menu(surf, hero, tab_idx, selected_idx, at_altar, defeated_bosses
 
 
 def main():
+    if not os.path.exists(resource_path(os.path.join("assets", "manifest.ok"))):
+        build_assets.build_all(resource_path("assets"))
+
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Astral Knight")
     clock = pygame.time.Clock()
     entity_layer = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 
+    assets = AssetLibrary()
     bloom = BloomRenderer()
-    sprite_bank = SpriteBank()
+    sfx = SoundManager()
 
     f_big = get_font(62, bold=True)
     f_med = get_font(24, bold=True)
@@ -277,9 +279,9 @@ def main():
         rtype, plats, hazs, clsts, enms, al_rect = build_room(1, 0)
         b = BIOMES[0]
         motes = [WeatherParticle(b) for _ in range(42)]
-        return h, 1, 0, rtype, plats, hazs, clsts, enms, al_rect, None, build_sky_surface(b), motes
+        return h, 1, 0, rtype, plats, hazs, clsts, enms, al_rect, None, motes
 
-    hero, depth, room_idx, room_type, platforms, hazards, clusters, enemies, altar_rect, boss, sky_surf, motes = init_run()
+    hero, depth, room_idx, room_type, platforms, hazards, clusters, enemies, altar_rect, boss, motes = init_run()
 
     sparks, rings, floating_texts = [], [], []
     lumen_crystals, shockwaves, projectiles, lasers, arts = [], [], [], [], []
@@ -296,12 +298,11 @@ def main():
 
     def enter_room(new_depth, new_room_idx):
         nonlocal depth, room_idx, room_type, platforms, hazards, clusters, enemies, altar_rect, boss
-        nonlocal sky_surf, motes, banner_timer, banner_text
+        nonlocal motes, banner_timer, banner_text
         depth = new_depth
         room_idx = new_room_idx
         biome = BIOMES[(depth - 1) % len(BIOMES)]
         if room_idx == 0:
-            sky_surf = build_sky_surface(biome)
             motes = [WeatherParticle(biome) for _ in range(42)]
             hero.immortal_used = False
 
@@ -316,12 +317,14 @@ def main():
         hero.vx = 0.0
         hero.vy = 0.0
         hero.rect.topleft = (int(hero.x), int(hero.y))
+        sfx.play("door_open")
 
         if room_type == "boss":
             bdef = BOSS_DEFS[(depth - 1) % len(BOSS_DEFS)]
             boss = Boss(depth, bdef)
             banner_text = boss.name
             banner_timer = 2.1
+            sfx.play("boss_roar")
         else:
             boss = None
             if room_idx == 0:
@@ -331,13 +334,15 @@ def main():
     def apply_blessing(bl):
         hero.blessings.append(bl["id"])
         hero.recalculate_stats()
+        sfx.play("ui_select")
         if bl["id"] == "b_hp":
             hero.hp = min(hero.max_hp, hero.hp + 3)
         elif bl["id"] == "b_flow":
             hero.resonance = max(hero.resonance, 30.0)
 
     while True:
-        dt = min(0.04, clock.tick(FPS) / 1000.0)
+        dt = min(0.05, clock.tick(FPS) / 1000.0)
+        fps_val = clock.get_fps() or FPS
         keys = pygame.key.get_pressed()
         biome = BIOMES[(depth - 1) % len(BIOMES)]
 
@@ -350,16 +355,25 @@ def main():
                 if event.key == pygame.K_F11:
                     fullscreen = not fullscreen
                     screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN if fullscreen else 0)
+                elif event.key == pygame.K_m:
+                    sfx.toggle_mute()
+                elif event.key == pygame.K_LEFTBRACKET:
+                    sfx.adjust_volume(-0.1)
+                    sfx.play("ui_move")
+                elif event.key == pygame.K_RIGHTBRACKET:
+                    sfx.adjust_volume(0.1)
+                    sfx.play("ui_move")
 
                 if game_state == "title":
                     if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                         game_state = "playing"
+                        sfx.play("ui_select")
                         banner_text = f"ЭТАЖ 1  |  {biome['name']}"
                         banner_timer = 2.0
 
                 elif game_state == "game_over":
                     if event.key == pygame.K_r:
-                        hero, depth, room_idx, room_type, platforms, hazards, clusters, enemies, altar_rect, boss, sky_surf, motes = init_run()
+                        hero, depth, room_idx, room_type, platforms, hazards, clusters, enemies, altar_rect, boss, motes = init_run()
                         sparks.clear()
                         rings.clear()
                         floating_texts.clear()
@@ -368,13 +382,16 @@ def main():
                         projectiles.clear()
                         lasers.clear()
                         arts.clear()
+                        sfx.play("ui_select")
                         game_state = "playing"
 
                 elif game_state == "blessing_draft":
                     if event.key in (pygame.K_LEFT, pygame.K_a):
                         draft_sel = (draft_sel - 1) % 3
+                        sfx.play("ui_move")
                     elif event.key in (pygame.K_RIGHT, pygame.K_d):
                         draft_sel = (draft_sel + 1) % 3
+                        sfx.play("ui_move")
                     elif event.key == pygame.K_1:
                         apply_blessing(draft_choices[0])
                         enter_room(depth, room_idx + 1)
@@ -394,31 +411,36 @@ def main():
 
                 elif game_state == "altar_menu":
                     if event.key in (pygame.K_ESCAPE, pygame.K_TAB):
+                        sfx.play("ui_move")
                         game_state = "playing"
                     elif event.key == pygame.K_1:
-                        menu_tab = 0
-                        menu_sel = 0
+                        menu_tab, menu_sel = 0, 0
+                        sfx.play("ui_move")
                     elif event.key == pygame.K_2:
-                        menu_tab = 1
-                        menu_sel = 0
+                        menu_tab, menu_sel = 1, 0
+                        sfx.play("ui_move")
                     elif event.key == pygame.K_3:
-                        menu_tab = 2
-                        menu_sel = 0
+                        menu_tab, menu_sel = 2, 0
+                        sfx.play("ui_move")
                     elif event.key == pygame.K_4:
-                        menu_tab = 3
-                        menu_sel = 0
+                        menu_tab, menu_sel = 3, 0
+                        sfx.play("ui_move")
                     elif event.key in (pygame.K_UP, pygame.K_w):
                         step = 2 if menu_tab == 0 else 1
                         limit = len(RELICS) if menu_tab == 0 else (3 if menu_tab == 1 else 4)
                         menu_sel = (menu_sel - step) % limit
+                        sfx.play("ui_move")
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
                         step = 2 if menu_tab == 0 else 1
                         limit = len(RELICS) if menu_tab == 0 else (3 if menu_tab == 1 else 4)
                         menu_sel = (menu_sel + step) % limit
+                        sfx.play("ui_move")
                     elif event.key in (pygame.K_LEFT, pygame.K_a) and menu_tab == 0:
                         menu_sel = (menu_sel - 1) % len(RELICS)
+                        sfx.play("ui_move")
                     elif event.key in (pygame.K_RIGHT, pygame.K_d) and menu_tab == 0:
                         menu_sel = (menu_sel + 1) % len(RELICS)
+                        sfx.play("ui_move")
                     elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and at_altar:
                         if menu_tab == 0:
                             rel = RELICS[menu_sel % len(RELICS)]
@@ -426,15 +448,19 @@ def main():
                                 if hero.lumen >= rel["cost"]:
                                     hero.lumen -= rel["cost"]
                                     rel["unlocked"] = True
+                                    sfx.play("ui_select")
                             else:
                                 if rel["id"] in hero.equipped:
                                     hero.equipped.remove(rel["id"])
+                                    sfx.play("ui_select")
                                 elif hero.used_slots() + rel["slots"] <= hero.max_slots:
                                     hero.equipped.append(rel["id"])
+                                    sfx.play("ui_select")
                                 hero.recalculate_stats()
                                 hero.hp = hero.max_hp
                         elif menu_tab == 1:
                             hero.weapon_id = ["saber", "daggers", "greatsword"][menu_sel % 3]
+                            sfx.play("weapon_switch")
                         elif menu_tab == 2:
                             idx = menu_sel % 4
                             if idx == 0:
@@ -442,6 +468,7 @@ def main():
                                 if hero.lumen >= cost:
                                     hero.lumen -= cost
                                     hero.base_damage += 4
+                                    sfx.play("ui_select")
                             elif idx == 1:
                                 cost = 140 + (hero.base_max_hp - 6) * 65
                                 if hero.lumen >= cost and hero.base_max_hp < 12:
@@ -449,38 +476,45 @@ def main():
                                     hero.base_max_hp += 1
                                     hero.recalculate_stats()
                                     hero.hp = hero.max_hp
+                                    sfx.play("ui_select")
                             elif idx == 2:
                                 cost = 130 + (hero.max_slots - 4) * 55
                                 if hero.lumen >= cost and hero.max_slots < 12:
                                     hero.lumen -= cost
                                     hero.max_slots += 1
+                                    sfx.play("ui_select")
                             elif idx == 3:
                                 cost = 120 + int((hero.max_aether - 100) * 2)
                                 if hero.lumen >= cost and hero.max_aether < 200:
                                     hero.lumen -= cost
                                     hero.max_aether += 25.0
                                     hero.aether = hero.max_aether
+                                    sfx.play("ui_select")
 
                 elif game_state == "playing":
-                    # Смена оружия на лету (1, 2, 3)
                     if event.key == pygame.K_1:
                         hero.weapon_id = "saber"
+                        sfx.play("weapon_switch")
                         floating_texts.append(FloatingText(hero.rect.centerx, hero.rect.top - 16, "Астральная Сабля", WEAPONS["saber"]["color"], 18))
                     elif event.key == pygame.K_2:
                         hero.weapon_id = "daggers"
+                        sfx.play("weapon_switch")
                         floating_texts.append(FloatingText(hero.rect.centerx, hero.rect.top - 16, "Звёздные Кинжалы", WEAPONS["daggers"]["color"], 18))
                     elif event.key == pygame.K_3:
                         hero.weapon_id = "greatsword"
+                        sfx.play("weapon_switch")
                         floating_texts.append(FloatingText(hero.rect.centerx, hero.rect.top - 16, "Солнечный Клеймор", WEAPONS["greatsword"]["color"], 18))
 
                     elif event.key == pygame.K_TAB:
                         at_altar = False
+                        sfx.play("ui_move")
                         game_state = "altar_menu"
 
                     elif room_type == "sanctuary" and altar_rect and hero.rect.colliderect(altar_rect.inflate(48, 20)) and event.key in (pygame.K_w, pygame.K_e):
                         hero.hp = hero.max_hp
                         hero.aether = hero.max_aether
                         at_altar = True
+                        sfx.play("heal_complete")
                         game_state = "altar_menu"
 
                     elif event.key == pygame.K_SPACE and (keys[pygame.K_s] or keys[pygame.K_DOWN]) and hero.on_ground and hero.y + hero.rect.height < FLOOR_Y - 5:
@@ -488,6 +522,7 @@ def main():
                         hero.on_ground = False
                     elif event.key in (pygame.K_SPACE, pygame.K_w, pygame.K_UP):
                         if hero.jumps_left > 0 and hero.dash_timer <= 0 and not hero.dive_active:
+                            sfx.play("jump" if hero.on_ground else "double_jump")
                             hero.vy = -815.0
                             hero.jumps_left -= 1
                             hero.on_ground = False
@@ -495,17 +530,17 @@ def main():
                             rings.append(RingWave(hero.rect.centerx, hero.rect.bottom, 42, (135, 235, 255), 0.25, 3))
 
                     elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT, pygame.K_k):
-                        if hero.start_dash():
+                        if hero.start_dash(sfx):
                             shake = max(shake, 4.0)
 
                     elif event.key == pygame.K_j:
-                        hero.start_slash(keys, projectiles)
+                        hero.start_slash(keys, projectiles, sfx)
 
                     elif event.key in (pygame.K_q, pygame.K_c):
-                        hero.start_parry()
+                        hero.start_parry(sfx)
 
                     elif event.key == pygame.K_e:
-                        if hero.cast_art(keys, arts, sparks):
+                        if hero.cast_art(keys, arts, sparks, sfx):
                             shake = max(shake, 7.0)
 
             if event.type == pygame.KEYUP:
@@ -514,12 +549,12 @@ def main():
 
             if event.type == pygame.MOUSEBUTTONDOWN and game_state == "playing":
                 if event.button == 1:
-                    hero.start_slash(keys, projectiles)
+                    hero.start_slash(keys, projectiles, sfx)
                 elif event.button == 3:
-                    if hero.start_dash():
+                    if hero.start_dash(sfx):
                         shake = max(shake, 4.0)
                 elif event.button == 2:
-                    hero.start_parry()
+                    hero.start_parry(sfx)
 
         # --- ОБНОВЛЕНИЕ ЛОГИКИ ---
         if game_state == "playing":
@@ -530,15 +565,15 @@ def main():
             if hitstop > 0:
                 hitstop -= dt
             else:
-                hero.update(dt, keys, platforms, sparks, rings, arts, shockwaves)
+                hero.update(dt, keys, platforms, sparks, rings, arts, shockwaves, sfx)
                 syns = hero.active_synergies()
 
-                # Отложенный Эхо-Клинок + синергия Тройная Нова
                 if hero.pending_echo:
                     delay, e_rect, e_dir = hero.pending_echo
                     delay -= dt
                     if delay <= 0:
                         hero.pending_echo = None
+                        sfx.play("echo_slash", vol_mult=0.75)
                         rings.append(RingWave(e_rect.centerx, e_rect.centery, 58, (195, 145, 255), 0.22, 4))
                         edmg = max(4, int(hero.blade_damage * 0.55))
                         for en in enemies:
@@ -559,9 +594,9 @@ def main():
                 for cl in clusters:
                     cl.update(dt)
                 for en in enemies:
-                    en.update(dt, hero, projectiles)
+                    en.update(dt, hero, projectiles, sfx)
                 if boss and boss.hp > 0:
-                    boss.update(dt, hero, projectiles, shockwaves, lasers, sparks)
+                    boss.update(dt, hero, projectiles, shockwaves, lasers, sparks, sfx)
 
                 for sw in shockwaves:
                     sw.update(dt)
@@ -589,16 +624,15 @@ def main():
                 rings = [r for r in rings if r.life > 0]
                 floating_texts = [f for f in floating_texts if f.life > 0]
 
-                # Сбор Люмена
                 for lc in list(lumen_crystals):
                     if lc.life <= 0:
                         lumen_crystals.remove(lc)
                     elif hero.rect.colliderect(lc.rect.inflate(14, 14)):
                         mult = (1.3 if hero.has_relic("lumen_magnet") else 1.0) * (1.4 if hero.has_blessing("b_lumen") else 1.0)
                         hero.lumen += int(round(lc.value * mult))
+                        sfx.play("lumen_pickup", vol_mult=0.7, cooldown=0.05)
                         lumen_crystals.remove(lc)
 
-                # Попадания клинка
                 s_rect = hero.get_slash_rect()
                 aether_gain = hero.weapon["aether_gain"] * (1.45 if hero.has_relic("void_siphon") else 1.0)
 
@@ -608,6 +642,7 @@ def main():
                             if s_rect.colliderect(hz.rect):
                                 hero.vy = -810.0
                                 hero.reset_air_mobility()
+                                sfx.play("pogo_bounce")
                                 rings.append(RingWave(hero.rect.centerx, hz.rect.top, 45, biome["accent"], 0.25, 3))
                                 break
 
@@ -617,6 +652,7 @@ def main():
                             cl.hp -= 1
                             cl.flash = 0.08
                             shake = max(shake, 5.0)
+                            sfx.play("hit_enemy")
                             for _ in range(4 if cl.hp > 0 else 10):
                                 lumen_crystals.append(LumenCrystal(cl.rect.centerx, cl.rect.centery, 6))
 
@@ -631,6 +667,7 @@ def main():
                             )
                             if blocked:
                                 hero.vx = -hero.facing * 320.0
+                                sfx.play("hit_shield")
                                 floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, "ЩИТ! (Нажми 3)", (140, 225, 255), 17))
                             else:
                                 crit = hero.has_blessing("b_crit") and random.random() < 0.25
@@ -638,16 +675,18 @@ def main():
                                 en.hp -= dmg
                                 en.flash = 0.08
                                 hero.aether = min(hero.max_aether, hero.aether + aether_gain)
-                                hero.add_resonance(12.0)
+                                hero.add_resonance(12.0, sfx)
                                 hero.combo_count += 1
                                 hitstop = 0.026
                                 shake = max(shake, 6.0)
+                                sfx.play("hit_crit" if crit else "hit_enemy")
                                 floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, f"{dmg}{'!' if crit else ''}", (255, 225, 110) if crit else (255, 255, 255), 21 if crit else 19))
                                 for _ in range(10):
                                     sparks.append(SparkParticle(en.rect.centerx, en.rect.centery, random.uniform(-340, 340), random.uniform(-340, 120), hero.weapon["color"], 0.28))
                                 if hero.slash_dir == "down":
                                     hero.vy = -810.0
                                     hero.reset_air_mobility()
+                                    sfx.play("pogo_bounce")
                                     if hero.has_relic("astral_vortex"):
                                         arts.append(AstralArtBlast(hero.rect.centerx - 90, hero.rect.centery - 90, 180, 180, 0, 0, int(dmg * 0.8), 0.18, "nova"))
                                 else:
@@ -659,10 +698,11 @@ def main():
                         dmg = hero.blade_damage * (2 if crit else 1)
                         boss.take_damage(dmg)
                         hero.aether = min(hero.max_aether, hero.aether + aether_gain)
-                        hero.add_resonance(11.0)
+                        hero.add_resonance(11.0, sfx)
                         hero.combo_count += 1
                         hitstop = 0.034
                         shake = max(shake, 8.0)
+                        sfx.play("hit_crit" if crit else "hit_enemy")
                         floating_texts.append(FloatingText(boss.rect.centerx + random.randint(-20, 20), boss.rect.top - 14, f"{dmg}{'!' if crit else ''}", (255, 230, 115), 23))
                         for _ in range(14):
                             sparks.append(SparkParticle(boss.rect.centerx, boss.rect.centery, random.uniform(-420, 420), random.uniform(-420, 140), boss.glow, 0.32))
@@ -672,6 +712,7 @@ def main():
                         if hero.slash_dir == "down":
                             hero.vy = -810.0
                             hero.reset_air_mobility()
+                            sfx.play("pogo_bounce")
                             if hero.has_relic("astral_vortex"):
                                 arts.append(AstralArtBlast(hero.rect.centerx - 95, hero.rect.centery - 95, 190, 190, 0, 0, int(dmg * 0.8), 0.18, "nova"))
                         elif hero.slash_dir == "left":
@@ -679,7 +720,6 @@ def main():
                         elif hero.slash_dir == "right":
                             hero.vx = -220.0
 
-                # Искровой Шаг при рывке
                 if hero.dash_timer > 0 and hero.has_relic("volt_step"):
                     vdmg = int(hero.blade_damage * 1.15)
                     for en in enemies:
@@ -687,13 +727,14 @@ def main():
                             hero.dash_hit_ids.add(id(en))
                             en.hp -= vdmg
                             en.flash = 0.08
+                            sfx.play("hit_enemy")
                             floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, vdmg, (120, 220, 255), 20))
                     if boss and boss.hp > 0 and hero.rect.colliderect(boss.rect) and id(boss) not in hero.dash_hit_ids:
                         hero.dash_hit_ids.add(id(boss))
                         boss.take_damage(vdmg)
+                        sfx.play("hit_enemy")
                         floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 14, vdmg, (120, 220, 255), 22))
 
-                # Дружественные снаряды и Астральные Искусства
                 for pr in list(projectiles):
                     if pr.friendly:
                         for en in enemies:
@@ -701,10 +742,12 @@ def main():
                                 pr.hit_ids.add(id(en))
                                 en.hp -= pr.damage
                                 en.flash = 0.08
+                                sfx.play("hit_enemy")
                                 floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, pr.damage, (255, 220, 115), 20))
                         if boss and boss.hp > 0 and pr.rect.colliderect(boss.rect) and id(boss) not in pr.hit_ids:
                             pr.hit_ids.add(id(boss))
                             boss.take_damage(pr.damage)
+                            sfx.play("hit_enemy")
                             floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 14, pr.damage, (255, 220, 115), 22))
 
                 for ar in arts:
@@ -714,17 +757,20 @@ def main():
                             en.hp -= ar.damage
                             en.flash = 0.1
                             shake = max(shake, 8.0)
+                            sfx.play("hit_crit")
                             floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 12, f"{ar.damage}!", (115, 235, 255), 24))
                     if boss and boss.hp > 0 and ar.rect.colliderect(boss.rect) and id(boss) not in ar.hit_ids:
                         ar.hit_ids.add(id(boss))
                         boss.take_damage(ar.damage)
                         hitstop = 0.04
                         shake = max(shake, 10.0)
+                        sfx.play("hit_crit")
                         floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 18, f"{ar.damage}!", (115, 235, 255), 26))
 
                 for en in list(enemies):
                     if en.hp <= 0:
                         enemies.remove(en)
+                        sfx.play("enemy_die")
                         if hero.has_relic("crimson_fang") and hero.hp < hero.max_hp and random.random() < 0.35:
                             hero.hp += 1
                         rings.append(RingWave(en.rect.centerx, en.rect.centery, 65, biome["accent"], 0.28, 4))
@@ -735,7 +781,6 @@ def main():
                             spd = random.uniform(120, 380)
                             sparks.append(SparkParticle(en.rect.centerx, en.rect.centery, math.cos(ang) * spd, math.sin(ang) * spd, biome["accent"], 0.38))
 
-                # Астральное Парирование
                 parry_zone = hero.rect.inflate(40, 40)
                 if hero.parry_timer > 0:
                     parried_any = False
@@ -760,10 +805,11 @@ def main():
                         hero.parry_cd = 0.15
                         hero.invuln_timer = max(hero.invuln_timer, 0.45)
                         hero.aether = min(hero.max_aether, hero.aether + 28.0)
-                        hero.add_resonance(25.0)
+                        hero.add_resonance(25.0, sfx)
                         hero.combo_count += 2
                         hitstop = 0.065
                         shake = 13.0
+                        sfx.play("parry_success")
                         rings.append(RingWave(hero.rect.centerx, hero.rect.centery, 145, (255, 235, 130), 0.35, 6))
                         floating_texts.append(FloatingText(hero.rect.centerx, hero.rect.top - 22, "ПАРИРОВАНИЕ!", (255, 235, 130), 22))
                         if hero.has_blessing("b_parry") and hero.parry_heal_cd <= 0 and hero.hp < hero.max_hp:
@@ -779,7 +825,6 @@ def main():
                             if boss and boss.hp > 0:
                                 boss.take_damage(hero.blade_damage * 2)
 
-                # Получение урона
                 intangible = hero.dash_timer > 0 or hero.invuln_timer > 0 or hero.dive_active or hero.parry_timer > 0
                 if not intangible:
                     hurt = False
@@ -814,6 +859,7 @@ def main():
                         shake = 15.0
                         hero.vy = -440.0
                         hero.vx = -hero.facing * 360.0
+                        sfx.play("player_hurt")
                         rings.append(RingWave(hero.rect.centerx, hero.rect.centery, 110, (255, 85, 115), 0.3, 5))
 
                         if hero.has_relic("briar_halo"):
@@ -829,16 +875,17 @@ def main():
                             if "immortal_aegis" in syns and not hero.immortal_used:
                                 hero.immortal_used = True
                                 hero.hp = 1
+                                sfx.play("parry_success")
                                 rings.append(RingWave(hero.rect.centerx, hero.rect.centery, 260, (255, 225, 120), 0.5, 8))
                                 floating_texts.append(FloatingText(hero.rect.centerx, hero.rect.top - 26, "БЕССМЕРТНЫЙ СТРАЖ!", (255, 230, 120), 24))
                             else:
                                 game_state = "game_over"
 
-                # Победа над боссом
                 if room_type == "boss" and boss and boss.hp <= 0:
                     defeated_bosses.add(boss.kind)
                     shake = 18.0
                     hitstop = 0.085
+                    sfx.play("boss_defeat")
                     banner_text = f"{boss.name} ПОВЕРЖЕН!"
                     banner_timer = 2.4
                     rings.append(RingWave(boss.rect.centerx, boss.rect.centery, 280, boss.glow, 0.55, 8))
@@ -853,12 +900,12 @@ def main():
                     lasers.clear()
                     boss = None
 
-                # Переход в следующую комнату + Драфт Астральных Даров после залов I и II
                 gate_open = (room_type == "sanctuary") or (room_type == "combat" and len(enemies) == 0) or (room_type == "boss" and boss is None)
                 if gate_open and hero.rect.right >= WIDTH - 42:
                     if room_type == "combat":
                         draft_choices = random.sample(BLESSINGS, 3)
                         draft_sel = 0
+                        sfx.play("ui_select")
                         game_state = "blessing_draft"
                     elif room_idx < 3:
                         enter_room(depth, room_idx + 1)
@@ -872,7 +919,7 @@ def main():
 
         bloom.clear()
         gate_open = (room_type == "sanctuary") or (room_type == "combat" and len(enemies) == 0) or (room_type == "boss" and boss is None)
-        draw_world_backdrop(screen, bloom, sky_surf, biome, ox, oy, altar_rect, gate_open)
+        draw_world_backdrop(screen, bloom, assets, biome, ox, oy, altar_rect, gate_open)
         for m in motes:
             m.draw(screen, bloom, ox, oy)
 
@@ -886,10 +933,10 @@ def main():
         for sw in shockwaves:
             sw.draw(entity_layer, bloom, 0, 0)
         for en in enemies:
-            en.draw(entity_layer, bloom, sprite_bank, 0, 0)
+            en.draw(entity_layer, bloom, assets, 0, 0)
         if boss and boss.hp > 0:
-            boss.draw(entity_layer, bloom, sprite_bank, 0, 0)
-        hero.draw(entity_layer, bloom, sprite_bank, 0, 0)
+            boss.draw(entity_layer, bloom, assets, 0, 0)
+        hero.draw(entity_layer, bloom, assets, 0, 0)
         for ar in arts:
             ar.draw(entity_layer, bloom, 0, 0)
         for pr in projectiles:
@@ -903,7 +950,7 @@ def main():
         for rng in rings:
             rng.draw(entity_layer, bloom, 0, 0)
 
-        draw_reflective_floor(screen, sprite_bank, entity_layer, biome, ox, oy)
+        draw_reflective_floor(screen, assets, entity_layer, biome, ox, oy)
         screen.blit(entity_layer, (int(ox), int(oy)))
         bloom.compose(screen)
 
@@ -914,7 +961,7 @@ def main():
             p_img = f_prompt.render("[W / E] Коснуться Алтаря Резонанса (Реликвии, Оружие и Ковка)", True, (255, 240, 175))
             screen.blit(p_img, (altar_rect.centerx - p_img.get_width() // 2 + int(ox), altar_rect.top - 42 + int(oy)))
 
-        draw_hud(screen, hero, boss, depth, room_idx, biome)
+        draw_hud(screen, hero, boss, depth, room_idx, biome, fps_val, sfx)
 
         if banner_timer > 0 and game_state == "playing":
             b_img = f_med.render(banner_text, True, (245, 250, 255))
