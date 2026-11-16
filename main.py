@@ -3,173 +3,241 @@ import random
 import sys
 import pygame
 
-# --- БАЗОВЫЕ НАСТРОЙКИ ---
+# --- БАЗОВЫЕ ПАРАМЕТРЫ ЭКРАНА И ФИЗИКИ ---
 WIDTH, HEIGHT = 1280, 720
 FPS = 60
-FLOOR_Y = 615
-GRAVITY = 2300.0
+FLOOR_Y = 595
+GRAVITY = 2320.0
 
 
 def get_font(size, bold=False):
     return pygame.font.SysFont("segoeui,arial,tahoma,dejavusans", size, bold=bold)
 
 
-# --- БИОМЫ ---
+# --- 4 АВТОРСКИХ БИОМА ---
 BIOMES = [
     {
-        "name": "ЗАБЫТЫЙ ПЕРЕКРЁСТОК",
-        "bg": (11, 14, 24),
-        "pillar": (18, 23, 38),
-        "pillar_edge": (30, 38, 60),
-        "floor": (20, 25, 40),
-        "floor_line": (105, 130, 175),
-        "dust": (140, 175, 230),
+        "name": "ЗАТОНУВШАЯ ОБСЕРВАТОРИЯ",
+        "sky_top": (8, 12, 26),
+        "sky_bot": (18, 32, 56),
+        "accent": (85, 225, 245),
+        "accent_soft": (45, 130, 165),
+        "arch": (16, 24, 42),
+        "arch_rim": (48, 82, 118),
+        "floor_top": (14, 24, 40),
+        "floor_bot": (6, 10, 18),
+        "weather": "stars",
+        "weather_col": (165, 240, 255),
     },
     {
-        "name": "ЗЕЛЁНАЯ ТРОПА ПУСТОТЫ",
-        "bg": (10, 20, 18),
-        "pillar": (16, 33, 29),
-        "pillar_edge": (28, 56, 48),
-        "floor": (18, 36, 31),
-        "floor_line": (85, 195, 150),
-        "dust": (120, 240, 180),
+        "name": "ЯНТАРНЫЙ ЛИСТОПАД",
+        "sky_top": (24, 12, 22),
+        "sky_bot": (62, 28, 34),
+        "accent": (255, 185, 85),
+        "accent_soft": (185, 95, 55),
+        "arch": (34, 17, 24),
+        "arch_rim": (96, 48, 52),
+        "floor_top": (28, 15, 22),
+        "floor_bot": (12, 6, 10),
+        "weather": "leaves",
+        "weather_col": (255, 165, 75),
     },
     {
-        "name": "БАГРОВЫЙ КОЛИЗЕЙ",
-        "bg": (22, 11, 16),
-        "pillar": (38, 18, 25),
-        "pillar_edge": (64, 28, 40),
-        "floor": (40, 19, 26),
-        "floor_line": (220, 85, 110),
-        "dust": (255, 135, 110),
+        "name": "ХРУСТАЛЬНЫЕ КАТАКОМБЫ",
+        "sky_top": (8, 22, 24),
+        "sky_bot": (16, 48, 46),
+        "accent": (95, 245, 185),
+        "accent_soft": (42, 145, 115),
+        "arch": (13, 34, 34),
+        "arch_rim": (42, 98, 92),
+        "floor_top": (12, 30, 30),
+        "floor_bot": (5, 14, 15),
+        "weather": "spores",
+        "weather_col": (140, 255, 210),
     },
     {
-        "name": "ЯДРО БЕЗДНЫ",
-        "bg": (8, 8, 13),
-        "pillar": (15, 14, 24),
-        "pillar_edge": (42, 34, 68),
-        "floor": (16, 15, 26),
-        "floor_line": (175, 135, 255),
-        "dust": (200, 180, 255),
+        "name": "РАЗЛОМ ЗАТМЕНИЯ",
+        "sky_top": (10, 8, 16),
+        "sky_bot": (34, 22, 42),
+        "accent": (255, 215, 110),
+        "accent_soft": (165, 115, 235),
+        "arch": (20, 14, 28),
+        "arch_rim": (78, 56, 105),
+        "floor_top": (18, 14, 26),
+        "floor_bot": (8, 6, 12),
+        "weather": "eclipse",
+        "weather_col": (255, 225, 140),
     },
 ]
 
-# --- БАЗА АМУЛЕТОВ (12 ШТУК) ---
-CHARMS = [
+# --- 12 АВТОРСКИХ РЕЛИКВИЙ СИНЕРГИИ ---
+RELICS = [
     {
-        "id": "longnail",
-        "name": "Длинный Гвоздь",
-        "notches": 2,
+        "id": "echo_blade",
+        "name": "Эхо-Клинок",
+        "slots": 2,
         "cost": 0,
         "unlocked": True,
-        "color": (165, 215, 255),
-        "desc": "Увеличивает дальность удара гвоздём на 35%.",
+        "color": (95, 230, 255),
+        "desc": "Каждый взмах клинка вызывает второй фантомный разрез с задержкой.",
     },
     {
-        "id": "soul_catcher",
-        "name": "Ловец Душ",
-        "notches": 2,
+        "id": "mirror_aegis",
+        "name": "Зеркальный Бастион",
+        "slots": 2,
         "cost": 0,
         "unlocked": True,
-        "color": (235, 248, 255),
-        "desc": "+45% Души при каждом попадании гвоздём.",
+        "color": (255, 225, 120),
+        "desc": "Успешное парирование выпускает 3 самонаводящиеся звезды в ближайших врагов.",
     },
     {
-        "id": "grubsong",
-        "name": "Песнь Гусеничек",
-        "notches": 1,
+        "id": "harmonic_core",
+        "name": "Ядро Резонанса",
+        "slots": 1,
         "cost": 0,
         "unlocked": True,
-        "color": (130, 235, 155),
-        "desc": "Восстанавливает 25 Души при получении урона.",
+        "color": (185, 130, 255),
+        "desc": "Шкала Резонанса заполняется на 50% быстрее и дольше не спадает.",
     },
     {
-        "id": "quick_slash",
-        "name": "Быстрый Удар",
-        "notches": 3,
-        "cost": 160,
-        "unlocked": False,
-        "color": (120, 230, 255),
-        "desc": "Ускоряет взмахи гвоздём на 35%.",
-    },
-    {
-        "id": "shaman_stone",
-        "name": "Шаманский Камень",
-        "notches": 3,
-        "cost": 180,
-        "unlocked": False,
-        "color": (195, 140, 255),
-        "desc": "Увеличивает размер и урон всех заклинаний на 45%.",
-    },
-    {
-        "id": "sharp_shadow",
-        "name": "Пронизывающая Тень",
-        "notches": 2,
-        "cost": 140,
-        "unlocked": False,
-        "color": (95, 85, 140),
-        "desc": "Теневой рывок длиннее на 25% и наносит урон врагам насквозь.",
-    },
-    {
-        "id": "strength",
-        "name": "Нерушимая Сила",
-        "notches": 3,
-        "cost": 240,
-        "unlocked": False,
-        "color": (255, 95, 120),
-        "desc": "Увеличивает урон гвоздя на 40%.",
-    },
-    {
-        "id": "quick_focus",
-        "name": "Быстрый Фокус",
-        "notches": 3,
-        "cost": 150,
-        "unlocked": False,
-        "color": (210, 240, 255),
-        "desc": "Ускоряет лечение (Фокус) в 2 раза.",
-    },
-    {
-        "id": "heart",
-        "name": "Сердце Живокровки",
-        "notches": 2,
+        "id": "volt_step",
+        "name": "Искровой Шаг",
+        "slots": 2,
         "cost": 130,
         "unlocked": False,
-        "color": (90, 175, 255),
-        "desc": "Добавляет +2 маски здоровья.",
+        "color": (110, 200, 255),
+        "desc": "Фазовый рывок пронзает врагов и оставляет на месте разряд молнии.",
     },
     {
-        "id": "thorns",
-        "name": "Шипы Страданий",
-        "notches": 1,
+        "id": "solar_crescent",
+        "name": "Солнечный Серп",
+        "slots": 3,
+        "cost": 180,
+        "unlocked": False,
+        "color": (255, 195, 85),
+        "desc": "Каждый удар выпускает летящий энергетический серп (усиленный при полном HP).",
+    },
+    {
+        "id": "astral_vortex",
+        "name": "Астральный Вихрь",
+        "slots": 2,
+        "cost": 140,
+        "unlocked": False,
+        "color": (120, 250, 200),
+        "desc": "Удар вниз в воздухе (отскок) создаёт вокруг героя режущий вихрь.",
+    },
+    {
+        "id": "prism_lens",
+        "name": "Призма Света",
+        "slots": 3,
+        "cost": 200,
+        "unlocked": False,
+        "color": (235, 150, 255),
+        "desc": "Увеличивает размер и урон всех Астральных Искусств на 45%.",
+    },
+    {
+        "id": "gale_tempo",
+        "name": "Ритм Ветра",
+        "slots": 3,
+        "cost": 190,
+        "unlocked": False,
+        "color": (145, 245, 255),
+        "desc": "Ускоряет серию атак на 35% и сокращает перезарядку рывка.",
+    },
+    {
+        "id": "crystal_reaper",
+        "name": "Кристальный Жнец",
+        "slots": 2,
+        "cost": 150,
+        "unlocked": False,
+        "color": (255, 110, 145),
+        "desc": "Попадания дают на 40% больше Эфира, а убийство врага слегка лечит.",
+    },
+    {
+        "id": "briar_halo",
+        "name": "Венец Возмездия",
+        "slots": 1,
         "cost": 110,
         "unlocked": False,
-        "color": (140, 210, 120),
-        "desc": "При получении урона выпускает кольцо шипов вокруг героя.",
+        "color": (255, 130, 95),
+        "desc": "При получении урона высвобождает взрывную волну и 25 Эфира.",
     },
     {
-        "id": "swarm",
-        "name": "Рой Сборщиков",
-        "notches": 1,
-        "cost": 90,
+        "id": "lumen_magnet",
+        "name": "Магнит Люмена",
+        "slots": 1,
+        "cost": 95,
         "unlocked": False,
-        "color": (255, 215, 90),
-        "desc": "Притягивает Гео со всей комнаты и даёт +25% к добыче.",
+        "color": (255, 235, 140),
+        "desc": "Притягивает осколки Люмена со всей арены и даёт +30% к добыче.",
     },
     {
-        "id": "mark_of_pride",
-        "name": "Метка Гордости",
-        "notches": 3,
-        "cost": 260,
+        "id": "titan_heart",
+        "name": "Сердце Титана",
+        "slots": 2,
+        "cost": 160,
         "unlocked": False,
-        "color": (245, 245, 255),
-        "desc": "Огромный радиус клинка (+55%) и усиленный отскок.",
+        "color": (115, 215, 255),
+        "desc": "Добавляет +2 ячейки прочности (HP) и усиливает отбрасывание.",
     },
 ]
 
 
-# --- ВИЗУАЛЬНЫЕ ЭФФЕКТЫ И ОБЪЕКТЫ МИРА ---
+# --- КЭШ СВЕТОВЫХ ТЕКСТУР ДЛЯ 60 FPS ---
+GLOW_CACHE = {}
+
+
+def get_glow_surface(radius, color, alpha=110):
+    key = (int(radius), color, int(alpha))
+    if key in GLOW_CACHE:
+        return GLOW_CACHE[key]
+    r = max(4, int(radius))
+    surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+    steps = 8
+    for i in range(steps, 0, -1):
+        ratio = i / steps
+        cur_r = int(r * ratio)
+        cur_a = int(alpha * (1.0 - ratio * 0.85) ** 1.6)
+        pygame.draw.circle(surf, (*color, max(0, min(255, cur_a))), (r, r), cur_r)
+    GLOW_CACHE[key] = surf
+    return surf
+
+
+def blit_glow(surf, x, y, radius, color, alpha=110):
+    g = get_glow_surface(radius, color, alpha)
+    surf.blit(g, (int(x - g.get_width() // 2), int(y - g.get_height() // 2)), special_flags=pygame.BLEND_RGBA_ADD)
+
+
+def build_sky_surface(biome):
+    surf = pygame.Surface((WIDTH, FLOOR_Y))
+    c1 = biome["sky_top"]
+    c2 = biome["sky_bot"]
+    for y in range(FLOOR_Y):
+        t = y / max(1, FLOOR_Y - 1)
+        r = int(c1[0] + (c2[0] - c1[0]) * t)
+        g = int(c1[1] + (c2[1] - c1[1]) * t)
+        b = int(c1[2] + (c2[2] - c1[2]) * t)
+        pygame.draw.line(surf, (r, g, b), (0, y), (WIDTH, y))
+    return surf
+
+
+def build_floor_surface(biome):
+    h = HEIGHT - FLOOR_Y + 40
+    surf = pygame.Surface((WIDTH + 60, h))
+    c1 = biome["floor_top"]
+    c2 = biome["floor_bot"]
+    for y in range(h):
+        t = y / max(1, h - 1)
+        r = int(c1[0] + (c2[0] - c1[0]) * t)
+        g = int(c1[1] + (c2[1] - c1[1]) * t)
+        b = int(c1[2] + (c2[2] - c1[2]) * t)
+        pygame.draw.line(surf, (r, g, b), (0, y), (WIDTH + 60, y))
+    return surf
+
+
+# --- ЧАСТИЦЫ, ШЛЕЙФЫ, ТЕКСТЫ И ОБЪЕКТЫ ---
 class Particle:
-    def __init__(self, x, y, vx, vy, color, size, life, gravity=0.0):
+    def __init__(self, x, y, vx, vy, color, size, life, gravity=0.0, glow=False):
         self.x = float(x)
         self.y = float(y)
         self.vx = vx
@@ -179,6 +247,7 @@ class Particle:
         self.life = life
         self.max_life = life
         self.gravity = gravity
+        self.glow = glow
 
     def update(self, dt):
         self.vy += self.gravity * dt
@@ -191,16 +260,60 @@ class Particle:
             return
         ratio = max(0.0, self.life / self.max_life)
         r = max(1, int(self.size * ratio))
-        pygame.draw.circle(surf, self.color, (int(self.x + ox), int(self.y + oy)), r)
+        px, py = int(self.x + ox), int(self.y + oy)
+        if self.glow and r >= 2:
+            blit_glow(surf, px, py, r * 3, self.color, int(85 * ratio))
+        pygame.draw.circle(surf, self.color, (px, py), r)
+
+
+class WeatherMote:
+    def __init__(self, biome):
+        self.x = random.uniform(0, WIDTH)
+        self.y = random.uniform(0, FLOOR_Y)
+        self.phase = random.uniform(0, math.tau)
+        self.size = random.uniform(2.0, 4.5)
+        self.kind = biome["weather"]
+        self.color = biome["weather_col"]
+
+    def update(self, dt):
+        self.phase += dt * 2.4
+        if self.kind == "leaves":
+            self.x += (math.sin(self.phase) * 55.0 - 35.0) * dt
+            self.y += (48.0 + math.cos(self.phase) * 15.0) * dt
+        elif self.kind == "spores":
+            self.x += math.sin(self.phase) * 28.0 * dt
+            self.y -= 26.0 * dt
+        else:
+            self.x += math.sin(self.phase * 0.7) * 18.0 * dt
+            self.y -= 14.0 * dt
+
+        if self.x < -10:
+            self.x = WIDTH + 10
+        elif self.x > WIDTH + 10:
+            self.x = -10
+        if self.y < 10:
+            self.y = FLOOR_Y - 10
+        elif self.y > FLOOR_Y - 8:
+            self.y = 14.0
+
+    def draw(self, surf, ox, oy):
+        px, py = int(self.x + ox * 0.5), int(self.y + oy * 0.5)
+        if self.kind == "leaves":
+            ang = self.phase
+            p1 = (px + math.cos(ang) * 6, py + math.sin(ang) * 3)
+            p2 = (px - math.cos(ang) * 6, py - math.sin(ang) * 3)
+            pygame.draw.line(surf, self.color, p1, p2, 3)
+        else:
+            pygame.draw.circle(surf, self.color, (px, py), int(self.size))
 
 
 class Afterimage:
-    def __init__(self, rect, facing, color=(35, 42, 65)):
+    def __init__(self, rect, facing, color=(90, 220, 255)):
         self.rect = rect.copy()
         self.facing = facing
         self.color = color
-        self.life = 0.22
-        self.max_life = 0.22
+        self.life = 0.24
+        self.max_life = 0.24
 
     def update(self, dt):
         self.life -= dt
@@ -208,23 +321,56 @@ class Afterimage:
     def draw(self, surf, ox, oy):
         if self.life <= 0:
             return
-        alpha = int(160 * (self.life / self.max_life))
+        ratio = self.life / self.max_life
+        alpha = int(150 * ratio)
         s = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
-        pygame.draw.rect(s, (*self.color, alpha), (2, 4, self.rect.width - 4, self.rect.height - 4), border_radius=8)
+        pygame.draw.polygon(
+            s,
+            (*self.color, alpha),
+            [(self.rect.width // 2, 0), (self.rect.width, self.rect.height // 2), (self.rect.width // 2, self.rect.height), (0, self.rect.height // 2)],
+        )
         surf.blit(s, (int(self.rect.x + ox), int(self.rect.y + oy)))
 
 
+class SlashArc:
+    """Красивая полумесячная дуга удара с затуханием."""
+    def __init__(self, rect, direction, color=(120, 240, 255), is_echo=False):
+        self.rect = rect.copy()
+        self.direction = direction
+        self.color = color
+        self.is_echo = is_echo
+        self.life = 0.16
+        self.max_life = 0.16
+
+    def update(self, dt):
+        self.life -= dt
+
+    def draw(self, surf, ox, oy):
+        if self.life <= 0:
+            return
+        ratio = self.life / self.max_life
+        r = self.rect.move(int(ox), int(oy))
+        s = pygame.Surface((r.width + 20, r.height + 20), pygame.SRCALPHA)
+        local = pygame.Rect(10, 10, r.width, r.height)
+        alpha = int((170 if self.is_echo else 235) * ratio)
+        pygame.draw.ellipse(s, (*self.color, alpha), local, max(2, int(9 * ratio)))
+        inner = local.inflate(-14, -14)
+        if inner.width > 0 and inner.height > 0:
+            pygame.draw.ellipse(s, (255, 255, 255, alpha), inner, max(1, int(4 * ratio)))
+        surf.blit(s, (r.x - 10, r.y - 10))
+
+
 class FloatingText:
-    def __init__(self, x, y, text, color=(255, 255, 255), size=22):
+    def __init__(self, x, y, text, color=(255, 255, 255), size=20):
         self.x = float(x)
         self.y = float(y)
         self.text = str(text)
         self.color = color
         self.font = get_font(size, bold=True)
-        self.life = 0.75
+        self.life = 0.72
 
     def update(self, dt):
-        self.y -= 55.0 * dt
+        self.y -= 58.0 * dt
         self.life -= dt
 
     def draw(self, surf, ox, oy):
@@ -234,82 +380,85 @@ class FloatingText:
         surf.blit(img, (int(self.x - img.get_width() // 2 + ox), int(self.y + oy)))
 
 
-class GeoShard:
-    def __init__(self, x, y, value=5):
+class LumenCrystal:
+    def __init__(self, x, y, value=6):
         self.x = float(x)
         self.y = float(y)
         self.vx = random.uniform(-220, 220)
-        self.vy = random.uniform(-460, -180)
+        self.vy = random.uniform(-470, -190)
         self.value = value
         self.life = 25.0
+        self.spin = random.uniform(0, math.tau)
 
     @property
     def rect(self):
-        return pygame.Rect(int(self.x - 7), int(self.y - 7), 14, 14)
+        return pygame.Rect(int(self.x - 8), int(self.y - 8), 16, 16)
 
     def update(self, dt, player, magnet=False):
         self.life -= dt
+        self.spin += dt * 6.0
         dx = player.rect.centerx - self.x
         dy = player.rect.centery - self.y
         dist = math.hypot(dx, dy) or 1.0
-        pull_range = 950.0 if magnet else 145.0
-        if dist < pull_range:
-            spd = 780.0 if magnet else 480.0
+        pull = 1100.0 if magnet else 160.0
+        if dist < pull:
+            spd = 820.0 if magnet else 520.0
             self.vx += (dx / dist) * spd * 6.0 * dt
             self.vy += (dy / dist) * spd * 6.0 * dt
-            self.vx *= 0.92
-            self.vy *= 0.92
+            self.vx *= 0.91
+            self.vy *= 0.91
         else:
-            self.vy = min(950.0, self.vy + GRAVITY * 0.85 * dt)
+            self.vy = min(960.0, self.vy + GRAVITY * 0.85 * dt)
 
         self.x += self.vx * dt
         self.y += self.vy * dt
-
         if self.x < 45:
             self.x = 45.0
             self.vx *= -0.6
         elif self.x > WIDTH - 45:
             self.x = float(WIDTH - 45)
             self.vx *= -0.6
-
-        if self.y >= FLOOR_Y - 7:
-            self.y = float(FLOOR_Y - 7)
+        if self.y >= FLOOR_Y - 8:
+            self.y = float(FLOOR_Y - 8)
             self.vy *= -0.45
             self.vx *= 0.78
 
     def draw(self, surf, ox, oy):
         cx, cy = int(self.x + ox), int(self.y + oy)
-        pts = [(cx, cy - 8), (cx + 6, cy), (cx, cy + 8), (cx - 6, cy)]
-        pygame.draw.polygon(surf, (235, 245, 255), pts)
-        pygame.draw.polygon(surf, (130, 185, 235), pts, 2)
+        w = max(3, int(abs(math.cos(self.spin)) * 6))
+        pts = [(cx, cy - 9), (cx + w, cy), (cx, cy + 9), (cx - w, cy)]
+        blit_glow(surf, cx, cy, 18, (110, 235, 255), 75)
+        pygame.draw.polygon(surf, (215, 250, 255), pts)
+        pygame.draw.polygon(surf, (95, 215, 245), pts, 2)
 
 
 class Platform:
-    def __init__(self, x, y, w, h=18):
+    def __init__(self, x, y, w, h=16):
         self.rect = pygame.Rect(x, y, w, h)
 
     def draw(self, surf, ox, oy, biome):
         r = self.rect.move(int(ox), int(oy))
-        pygame.draw.rect(surf, biome["floor"], r, border_radius=5)
-        pygame.draw.line(surf, biome["floor_line"], (r.left + 3, r.top + 1), (r.right - 3, r.top + 1), 3)
+        pygame.draw.rect(surf, biome["arch"], r, border_radius=6)
+        pygame.draw.rect(surf, biome["arch_rim"], r, 2, border_radius=6)
+        pygame.draw.line(surf, biome["accent"], (r.left + 8, r.top + 1), (r.right - 8, r.top + 1), 2)
 
 
-class SpikeHazard:
-    """Шипы: наносят урон при касании, но от них можно отпрыгивать пого-ударом вниз!"""
+class CrystalHazard:
+    """Кристальные шипы: наносят урон при касании, но позволяют оттолкнуться ударом вниз!"""
     def __init__(self, x, y, w):
-        self.rect = pygame.Rect(x, y - 22, w, 22)
+        self.rect = pygame.Rect(x, y - 24, w, 24)
 
-    def draw(self, surf, ox, oy):
+    def draw(self, surf, ox, oy, biome):
         r = self.rect.move(int(ox), int(oy))
-        step = 18
+        step = 20
         for sx in range(r.left, r.right - 6, step):
-            pts = [(sx, r.bottom), (sx + step // 2, r.top), (sx + step, r.bottom)]
-            pygame.draw.polygon(surf, (165, 180, 210), pts)
-            pygame.draw.polygon(surf, (40, 48, 68), pts, 2)
+            pts = [(sx + 2, r.bottom), (sx + step // 2, r.top), (sx + step - 2, r.bottom)]
+            pygame.draw.polygon(surf, biome["accent_soft"], pts)
+            pygame.draw.polygon(surf, biome["accent"], pts, 2)
 
 
-class GeoDeposit:
-    """Кристальная жила с Гео в комнатах."""
+class LumenCluster:
+    """Кристальная друза с Люменом."""
     def __init__(self, x, y):
         self.rect = pygame.Rect(x - 22, y - 48, 44, 48)
         self.hp = 3
@@ -322,27 +471,19 @@ class GeoDeposit:
         if self.hp <= 0:
             return
         r = self.rect.move(int(ox), int(oy))
-        col = (255, 255, 255) if self.flash > 0 else (95, 165, 225)
-        pygame.draw.polygon(
-            surf,
-            col,
-            [(r.left + 4, r.bottom), (r.left + 10, r.top + 12), (r.centerx, r.top), (r.right - 8, r.top + 16), (r.right - 4, r.bottom)],
-        )
-        pygame.draw.polygon(
-            surf,
-            (225, 245, 255),
-            [(r.centerx - 6, r.bottom), (r.centerx, r.top + 8), (r.centerx + 8, r.bottom)],
-        )
+        blit_glow(surf, r.centerx, r.centery, 42, (95, 225, 255), 65)
+        col = (255, 255, 255) if self.flash > 0 else (75, 195, 235)
+        pygame.draw.polygon(surf, col, [(r.left + 6, r.bottom), (r.left + 12, r.top + 14), (r.centerx, r.top), (r.right - 10, r.top + 16), (r.right - 6, r.bottom)])
+        pygame.draw.polygon(surf, (230, 252, 255), [(r.centerx - 5, r.bottom), (r.centerx, r.top + 10), (r.centerx + 7, r.bottom)])
 
 
 # --- СНАРЯДЫ, ВОЛНЫ, ЛАЗЕРЫ И ЗАКЛИНАНИЯ ---
 class Shockwave:
-    def __init__(self, x, y, vx, height=62, life=1.45, color=(230, 70, 100), friendly=False, damage=1):
-        self.rect = pygame.Rect(int(x - 18), int(y - height), 36, height)
+    def __init__(self, x, y, vx, height=64, life=1.4, color=(255, 110, 120), friendly=False, damage=1):
+        self.rect = pygame.Rect(int(x - 16), int(y - height), 32, height)
         self.x = float(self.rect.x)
         self.vx = vx
         self.life = life
-        self.max_life = life
         self.color = color
         self.friendly = friendly
         self.damage = damage
@@ -355,14 +496,14 @@ class Shockwave:
 
     def draw(self, surf, ox, oy):
         r = self.rect.move(int(ox), int(oy))
-        pygame.draw.rect(surf, self.color, r, border_radius=7)
-        inner = r.inflate(-14, -10)
-        if inner.width > 0 and inner.height > 0:
-            pygame.draw.rect(surf, (255, 245, 255), inner, border_radius=4)
+        blit_glow(surf, r.centerx, r.centery, 45, self.color, 80)
+        pts = [(r.left, r.bottom), (r.centerx, r.top), (r.right, r.bottom)]
+        pygame.draw.polygon(surf, self.color, pts)
+        pygame.draw.polygon(surf, (255, 250, 255), [(r.left + 8, r.bottom), (r.centerx, r.top + 14), (r.right - 8, r.bottom)])
 
 
 class Projectile:
-    def __init__(self, x, y, vx, vy, radius=13, color=(255, 75, 115), homing=False, boomerang=False, owner=None):
+    def __init__(self, x, y, vx, vy, radius=12, color=(255, 100, 130), homing=False, boomerang=False, owner=None, friendly=False, damage=1):
         self.x = float(x)
         self.y = float(y)
         self.vx = vx
@@ -373,26 +514,29 @@ class Projectile:
         self.homing = homing
         self.boomerang = boomerang
         self.owner = owner
+        self.friendly = friendly
+        self.damage = damage
         self.age = 0.0
+        self.hit_ids = set()
 
     @property
     def rect(self):
-        s = int(self.radius * 1.45)
+        s = int(self.radius * 1.5)
         return pygame.Rect(int(self.x - s // 2), int(self.y - s // 2), s, s)
 
-    def update(self, dt, player=None):
+    def update(self, dt, target=None):
         self.age += dt
         self.life -= dt
-        if self.homing and player and self.age < 2.2:
-            dx = player.rect.centerx - self.x
-            dy = player.rect.centery - self.y
+        if self.homing and target and self.age < 2.4:
+            dx = target.rect.centerx - self.x
+            dy = target.rect.centery - self.y
             dist = math.hypot(dx, dy) or 1.0
-            self.vx += (dx / dist) * 520.0 * dt
-            self.vy += (dy / dist) * 520.0 * dt
+            self.vx += (dx / dist) * 620.0 * dt
+            self.vy += (dy / dist) * 620.0 * dt
             spd = math.hypot(self.vx, self.vy)
-            if spd > 420.0:
-                self.vx = (self.vx / spd) * 420.0
-                self.vy = (self.vy / spd) * 420.0
+            if spd > 460.0:
+                self.vx = (self.vx / spd) * 460.0
+                self.vy = (self.vy / spd) * 460.0
         elif self.boomerang and self.owner and self.age > 0.55:
             dx = self.owner.rect.centerx - self.x
             dy = self.owner.rect.centery - self.y
@@ -407,20 +551,20 @@ class Projectile:
 
     def draw(self, surf, ox, oy):
         pos = (int(self.x + ox), int(self.y + oy))
+        blit_glow(surf, pos[0], pos[1], self.radius * 2.4, self.color, 95)
         if self.boomerang:
-            ang = self.age * 18.0
+            ang = self.age * 20.0
             p1 = (pos[0] + math.cos(ang) * 26, pos[1] + math.sin(ang) * 26)
             p2 = (pos[0] - math.cos(ang) * 26, pos[1] - math.sin(ang) * 26)
             pygame.draw.line(surf, self.color, p1, p2, 6)
-            pygame.draw.line(surf, (255, 240, 245), p1, p2, 2)
+            pygame.draw.line(surf, (255, 245, 255), p1, p2, 2)
         else:
             pygame.draw.circle(surf, self.color, pos, self.radius)
-            pygame.draw.circle(surf, (255, 240, 248), pos, max(3, self.radius // 2))
+            pygame.draw.circle(surf, (255, 250, 255), pos, max(3, self.radius // 2))
 
 
 class LaserBeam:
-    """Телеграфируемый лазер: сначала тонкий луч прицела, затем мощный удар."""
-    def __init__(self, x1, y1, angle, length=1400, warn_time=0.65, active_time=0.32, color=(235, 110, 255)):
+    def __init__(self, x1, y1, angle, length=1450, warn_time=0.65, active_time=0.32, color=(215, 130, 255)):
         self.x1 = x1
         self.y1 = y1
         self.x2 = x1 + math.cos(angle) * length
@@ -440,9 +584,7 @@ class LaserBeam:
     def collides_rect(self, rect):
         if not self.is_firing:
             return False
-        # Проверка пересечения отрезка лазера с расширенным хитбоксом игрока
-        expanded = rect.inflate(18, 18)
-        return bool(expanded.clipline((self.x1, self.y1), (self.x2, self.y2)))
+        return bool(rect.inflate(18, 18).clipline((self.x1, self.y1), (self.x2, self.y2)))
 
     def draw(self, surf, ox, oy):
         if self.timer <= 0:
@@ -452,13 +594,12 @@ class LaserBeam:
         if not self.is_firing:
             pygame.draw.line(surf, self.color, p1, p2, 2)
         else:
-            pygame.draw.line(surf, self.color, p1, p2, 26)
-            pygame.draw.line(surf, (255, 250, 255), p1, p2, 10)
+            pygame.draw.line(surf, self.color, p1, p2, 28)
+            pygame.draw.line(surf, (255, 252, 255), p1, p2, 10)
 
 
-class PlayerSpellBlast:
-    """Заклинания Души игрока: Мстительный дух, Воющие духи, Опустошающее пике."""
-    def __init__(self, x, y, w, h, vx, vy, damage, life, spell_type):
+class AstralArtBlast:
+    def __init__(self, x, y, w, h, vx, vy, damage, life, art_type):
         self.rect = pygame.Rect(int(x), int(y), int(w), int(h))
         self.x = float(x)
         self.y = float(y)
@@ -467,7 +608,7 @@ class PlayerSpellBlast:
         self.damage = damage
         self.life = life
         self.max_life = life
-        self.spell_type = spell_type
+        self.art_type = art_type
         self.hit_ids = set()
 
     def update(self, dt):
@@ -479,27 +620,26 @@ class PlayerSpellBlast:
 
     def draw(self, surf, ox, oy):
         r = self.rect.move(int(ox), int(oy))
-        if self.spell_type == "fireball":
-            pygame.draw.ellipse(surf, (190, 235, 255), r)
-            inner = r.inflate(-16, -14)
+        blit_glow(surf, r.centerx, r.centery, max(r.width, r.height) * 0.75, (95, 230, 255), 95)
+        if self.art_type == "lance":
+            pygame.draw.polygon(surf, (110, 235, 255), [(r.left, r.centery), (r.centerx, r.top), (r.right, r.centery), (r.centerx, r.bottom)])
+            pygame.draw.polygon(surf, (255, 255, 255), [(r.left + 16, r.centery), (r.centerx, r.top + 10), (r.right - 16, r.centery), (r.centerx, r.bottom - 10)])
+        elif self.art_type == "nova":
+            pygame.draw.ellipse(surf, (130, 220, 255), r, 8)
+            inner = r.inflate(-36, -36)
             if inner.width > 0 and inner.height > 0:
-                pygame.draw.ellipse(surf, (255, 255, 255), inner)
-        elif self.spell_type == "wraiths":
-            pygame.draw.rect(surf, (170, 210, 255), r, border_radius=24)
-            inner = r.inflate(-28, -20)
-            if inner.width > 0 and inner.height > 0:
-                pygame.draw.rect(surf, (255, 255, 255), inner, border_radius=18)
-        elif self.spell_type == "dive_boom":
-            pygame.draw.ellipse(surf, (160, 195, 255), r)
-            inner = r.inflate(-30, -24)
+                pygame.draw.ellipse(surf, (255, 255, 255), inner, 4)
+        elif self.art_type == "meteor":
+            pygame.draw.ellipse(surf, (125, 235, 255), r)
+            inner = r.inflate(-32, -22)
             if inner.width > 0 and inner.height > 0:
                 pygame.draw.ellipse(surf, (255, 255, 255), inner)
 
 
-# --- ИГРОК ---
-class Player:
+# --- ГЕРОЙ: АСТРАЛЬНЫЙ СТРАННИК ---
+class Hero:
     def __init__(self):
-        self.rect = pygame.Rect(140, FLOOR_Y - 56, 34, 56)
+        self.rect = pygame.Rect(140, FLOOR_Y - 58, 34, 58)
         self.x = float(self.rect.x)
         self.y = float(self.rect.y)
         self.vx = 0.0
@@ -509,13 +649,17 @@ class Player:
         self.base_max_hp = 6
         self.max_hp = 6
         self.hp = 6
-        self.max_soul = 100.0
-        self.soul = 66.0
-        self.base_damage = 15
-        self.geo = 60
+        self.max_aether = 100.0
+        self.aether = 65.0
+        self.base_damage = 16
+        self.lumen = 65
 
-        self.max_notches = 4
-        self.equipped = ["longnail", "soul_catcher"]
+        self.max_slots = 4
+        self.equipped = ["echo_blade", "mirror_aegis"]
+
+        # Шкала Резонанса (растёт от темпа боя)
+        self.resonance = 0.0  # 0..100
+        self.combo_count = 0
 
         self.on_ground = False
         self.jumps_left = 2
@@ -527,37 +671,56 @@ class Player:
         self.dash_dir = 1
         self.dash_hit_ids = set()
 
+        self.parry_timer = 0.0
+        self.parry_cd = 0.0
+
         self.slash_timer = 0.0
         self.slash_cd = 0.0
+        self.slash_step = 0
         self.slash_dir = "right"
         self.hit_ids = set()
+        self.pending_echo = None  # (delay, rect, direction)
 
         self.dive_active = False
         self.invuln_timer = 0.0
-        self.focus_timer = 0.0
+        self.mend_timer = 0.0
         self.afterimage_timer = 0.0
-        self.cape = [[self.rect.centerx, self.rect.centery] for _ in range(7)]
+        self.scarf = [[self.rect.centerx, self.rect.top + 22] for _ in range(8)]
 
-    def has_charm(self, cid):
-        return cid in self.equipped
+    def has_relic(self, rid):
+        return rid in self.equipped
 
-    def used_notches(self):
-        by_id = {c["id"]: c["notches"] for c in CHARMS}
-        return sum(by_id.get(cid, 0) for cid in self.equipped)
+    def used_slots(self):
+        by_id = {r["id"]: r["slots"] for r in RELICS}
+        return sum(by_id.get(rid, 0) for rid in self.equipped)
 
     def recalculate_stats(self):
-        bonus_hp = 2 if self.has_charm("heart") else 0
-        self.max_hp = self.base_max_hp + bonus_hp
+        bonus = 2 if self.has_relic("titan_heart") else 0
+        self.max_hp = self.base_max_hp + bonus
         self.hp = min(self.hp, self.max_hp)
 
     @property
-    def nail_damage(self):
-        mult = 1.4 if self.has_charm("strength") else 1.0
-        return int(round(self.base_damage * mult))
+    def resonance_tier(self):
+        if self.resonance >= 85:
+            return 3  # OVERDRIVE
+        if self.resonance >= 55:
+            return 2  # x1.5
+        if self.resonance >= 25:
+            return 1  # x1.25
+        return 0
 
     @property
-    def spell_mult(self):
-        return 1.45 if self.has_charm("shaman_stone") else 1.0
+    def blade_damage(self):
+        res_bonus = [1.0, 1.15, 1.3, 1.5][self.resonance_tier]
+        return int(round(self.base_damage * res_bonus))
+
+    @property
+    def art_mult(self):
+        return 1.45 if self.has_relic("prism_lens") else 1.0
+
+    def add_resonance(self, amount):
+        mult = 1.5 if self.has_relic("harmonic_core") else 1.0
+        self.resonance = min(100.0, self.resonance + amount * mult)
 
     def reset_air_mobility(self):
         self.jumps_left = 2
@@ -565,120 +728,127 @@ class Player:
 
     def start_dash(self):
         if self.dash_cd <= 0 and self.dash_timer <= 0 and not self.dive_active:
-            self.dash_timer = 0.21 if self.has_charm("sharp_shadow") else 0.17
-            self.dash_cd = 0.52
+            self.dash_timer = 0.19
+            self.dash_cd = 0.36 if self.has_relic("gale_tempo") else 0.50
             self.dash_dir = self.facing
             self.dash_hit_ids.clear()
             self.vy = 0.0
-            self.focus_timer = 0.0
+            self.mend_timer = 0.0
             return True
         return False
 
-    def start_slash(self, keys):
+    def start_parry(self):
+        if self.parry_cd <= 0 and self.parry_timer <= 0 and not self.dive_active:
+            self.parry_timer = 0.24
+            self.parry_cd = 0.62
+            self.mend_timer = 0.0
+            return True
+        return False
+
+    def start_slash(self, keys, slash_arcs, projectiles):
         if self.slash_cd <= 0 and self.dash_timer <= 0 and not self.dive_active:
             self.slash_timer = 0.14
-            self.slash_cd = 0.17 if self.has_charm("quick_slash") else 0.26
+            self.slash_cd = 0.17 if self.has_relic("gale_tempo") else 0.24
+            self.slash_step = (self.slash_step + 1) % 4
             self.hit_ids.clear()
-            self.focus_timer = 0.0
+            self.mend_timer = 0.0
+
             if keys[pygame.K_w] or keys[pygame.K_UP]:
                 self.slash_dir = "up"
             elif (keys[pygame.K_s] or keys[pygame.K_DOWN]) and not self.on_ground:
                 self.slash_dir = "down"
             else:
                 self.slash_dir = "right" if self.facing == 1 else "left"
+
+            s_rect = self.get_slash_rect()
+            if s_rect:
+                col = (255, 220, 110) if self.resonance_tier == 3 else (105, 235, 255)
+                slash_arcs.append(SlashArc(s_rect, self.slash_dir, col))
+                if self.has_relic("echo_blade"):
+                    self.pending_echo = (0.11, s_rect.copy(), self.slash_dir)
+
+                # Каждый 4-й удар в серии или реликвия Солнечный Серп выпускает волну!
+                if self.slash_step == 3 or (self.has_relic("solar_crescent") and self.hp == self.max_hp):
+                    vx = self.facing * 760.0 if self.slash_dir in ("left", "right") else 0.0
+                    vy = -760.0 if self.slash_dir == "up" else (760.0 if self.slash_dir == "down" else 0.0)
+                    projectiles.append(
+                        Projectile(
+                            s_rect.centerx,
+                            s_rect.centery,
+                            vx,
+                            vy,
+                            radius=14,
+                            color=(255, 215, 110),
+                            friendly=True,
+                            damage=int(self.blade_damage * 0.85),
+                        )
+                    )
             return True
         return False
 
-    def cast_spell(self, keys, spells, particles):
-        if self.soul < 33.0 or self.dash_timer > 0 or self.dive_active:
+    def cast_art(self, keys, arts, particles):
+        if self.aether < 33.0 or self.dash_timer > 0 or self.dive_active:
             return False
-        self.soul -= 33.0
-        self.focus_timer = 0.0
-        scale = 1.25 if self.has_charm("shaman_stone") else 1.0
+        self.aether -= 33.0
+        self.mend_timer = 0.0
+        scale = 1.25 if self.has_relic("prism_lens") else 1.0
 
-        # Вверх: Воющие Духи
+        # Вверх + E: Звёздная Нова
         if keys[pygame.K_w] or keys[pygame.K_UP]:
-            w, h = int(150 * scale), int(330 * scale)
-            spells.append(
-                PlayerSpellBlast(
-                    self.rect.centerx - w // 2,
-                    self.rect.top - h + 20,
-                    w,
-                    h,
+            rad = int(260 * scale)
+            arts.append(
+                AstralArtBlast(
+                    self.rect.centerx - rad // 2,
+                    self.rect.centery - rad // 2,
+                    rad,
+                    rad,
                     0,
-                    -140,
-                    int(44 * self.spell_mult),
+                    0,
+                    int(44 * self.art_mult),
                     0.26,
-                    "wraiths",
+                    "nova",
                 )
             )
-            self.vy = max(self.vy, 120.0)
             for _ in range(28):
-                particles.append(
-                    Particle(
-                        self.rect.centerx + random.uniform(-55, 55),
-                        self.rect.top,
-                        random.uniform(-60, 60),
-                        random.uniform(-650, -220),
-                        (220, 240, 255),
-                        7,
-                        0.4,
-                    )
-                )
+                ang = random.uniform(0, math.tau)
+                spd = random.uniform(180, 480)
+                particles.append(Particle(self.rect.centerx, self.rect.centery, math.cos(ang) * spd, math.sin(ang) * spd, (150, 235, 255), 6, 0.4, glow=True))
             return True
 
-        # Вниз в воздухе: Опустошающее Пике
+        # Вниз в воздухе + E: Метеорный Удар
         if (keys[pygame.K_s] or keys[pygame.K_DOWN]) and not self.on_ground:
             self.dive_active = True
             self.vx = 0.0
-            self.vy = 1480.0
+            self.vy = 1520.0
             self.invuln_timer = max(self.invuln_timer, 0.7)
             return True
 
-        # Вперёд: Мстительный Дух
-        w, h = int(92 * scale), int(56 * scale)
-        start_x = self.rect.right if self.facing == 1 else self.rect.left - w
-        spells.append(
-            PlayerSpellBlast(
-                start_x,
+        # Вперёд + E: Копьё Эфира
+        w, h = int(125 * scale), int(48 * scale)
+        sx = self.rect.right if self.facing == 1 else self.rect.left - w
+        arts.append(
+            AstralArtBlast(
+                sx,
                 self.rect.centery - h // 2,
                 w,
                 h,
-                self.facing * 940.0,
+                self.facing * 1020.0,
                 0.0,
-                int(34 * self.spell_mult),
-                1.2,
-                "fireball",
+                int(36 * self.art_mult),
+                1.1,
+                "lance",
             )
         )
-        self.vx = -self.facing * 160.0
-        for _ in range(18):
-            particles.append(
-                Particle(
-                    self.rect.centerx,
-                    self.rect.centery,
-                    self.facing * random.uniform(120, 380),
-                    random.uniform(-140, 140),
-                    (220, 245, 255),
-                    6,
-                    0.35,
-                )
-            )
+        self.vx = -self.facing * 150.0
         return True
 
     def get_slash_rect(self):
         if self.slash_timer <= 0:
             return None
-        reach = 1.0
-        if self.has_charm("mark_of_pride"):
-            reach = 1.55
-        elif self.has_charm("longnail"):
-            reach = 1.35
-
-        length = int(94 * reach)
-        broad = int(78 * (1.0 + (reach - 1.0) * 0.55))
+        reach = 1.25 if self.resonance_tier == 3 else 1.08
+        length = int(102 * reach)
+        broad = int(84 * reach)
         cx, cy = self.rect.center
-
         if self.slash_dir == "right":
             return pygame.Rect(self.rect.right - 6, cy - broad // 2, length, broad)
         if self.slash_dir == "left":
@@ -689,12 +859,20 @@ class Player:
             return pygame.Rect(cx - broad // 2, self.rect.bottom - 6, broad, length)
         return None
 
-    def update(self, dt, keys, platforms, particles, afterimages, spells, shockwaves):
+    def update(self, dt, keys, platforms, particles, afterimages, arts, shockwaves, slash_arcs):
         self.dash_cd = max(0.0, self.dash_cd - dt)
         self.slash_cd = max(0.0, self.slash_cd - dt)
         self.slash_timer = max(0.0, self.slash_timer - dt)
+        self.parry_cd = max(0.0, self.parry_cd - dt)
+        self.parry_timer = max(0.0, self.parry_timer - dt)
         self.invuln_timer = max(0.0, self.invuln_timer - dt)
         self.drop_through_timer = max(0.0, self.drop_through_timer - dt)
+
+        # Плавное затухание Резонанса вне боя
+        decay = 4.2 if self.has_relic("harmonic_core") else 6.8
+        self.resonance = max(0.0, self.resonance - decay * dt)
+        if self.resonance == 0:
+            self.combo_count = 0
 
         move_dir = 0
         if keys[pygame.K_a] or keys[pygame.K_LEFT]:
@@ -705,65 +883,51 @@ class Player:
         if move_dir != 0 and self.dash_timer <= 0 and not self.dive_active:
             self.facing = move_dir
 
-        # Фокус / Лечение (удерживать E или F)
-        want_focus = keys[pygame.K_e] or keys[pygame.K_f]
-        focus_needed = 0.42 if self.has_charm("quick_focus") else 0.82
+        # Гармоническое Восстановление (удерживать F на земле)
         if (
-            want_focus
+            keys[pygame.K_f]
             and self.on_ground
             and move_dir == 0
             and self.dash_timer <= 0
             and not self.dive_active
             and self.hp < self.max_hp
-            and self.soul >= 33.0
+            and self.aether >= 33.0
         ):
-            self.focus_timer += dt
+            self.mend_timer += dt
             if random.random() < 0.65:
-                particles.append(
-                    Particle(
-                        self.rect.centerx + random.uniform(-26, 26),
-                        self.rect.bottom - random.uniform(0, 44),
-                        random.uniform(-25, 25),
-                        random.uniform(-150, -60),
-                        (220, 245, 255),
-                        5,
-                        0.4,
-                    )
-                )
-            if self.focus_timer >= focus_needed:
-                self.focus_timer = 0.0
-                self.soul -= 33.0
+                particles.append(Particle(self.rect.centerx + random.uniform(-28, 28), self.rect.bottom - random.uniform(0, 46), random.uniform(-20, 20), random.uniform(-160, -60), (130, 245, 255), 5, 0.4, glow=True))
+            if self.mend_timer >= 0.72:
+                self.mend_timer = 0.0
+                self.aether -= 33.0
                 self.hp = min(self.max_hp, self.hp + 1)
                 for _ in range(24):
                     ang = random.uniform(0, math.tau)
                     spd = random.uniform(90, 270)
-                    particles.append(
-                        Particle(self.rect.centerx, self.rect.centery, math.cos(ang) * spd, math.sin(ang) * spd, (255, 255, 255), 7, 0.5)
-                    )
+                    particles.append(Particle(self.rect.centerx, self.rect.centery, math.cos(ang) * spd, math.sin(ang) * spd, (255, 255, 255), 7, 0.5, glow=True))
         else:
-            self.focus_timer = 0.0
+            self.mend_timer = 0.0
 
-        # Движение / Теневой рывок / Пике
+        # Движение / Метеорный удар / Фазовый рывок
         if self.dive_active:
             self.vx = 0.0
-            self.vy = 1480.0
+            self.vy = 1520.0
             self.afterimage_timer -= dt
             if self.afterimage_timer <= 0:
-                self.afterimage_timer = 0.025
-                afterimages.append(Afterimage(self.rect, self.facing, (180, 220, 255)))
+                self.afterimage_timer = 0.024
+                afterimages.append(Afterimage(self.rect, self.facing, (130, 240, 255)))
         elif self.dash_timer > 0:
             self.dash_timer -= dt
-            dash_spd = 1120.0 if self.has_charm("sharp_shadow") else 980.0
-            self.vx = self.dash_dir * dash_spd
+            self.vx = self.dash_dir * 1050.0
             self.vy = 0.0
             self.afterimage_timer -= dt
             if self.afterimage_timer <= 0:
-                self.afterimage_timer = 0.028
-                col = (140, 85, 220) if self.has_charm("sharp_shadow") else (40, 48, 72)
+                self.afterimage_timer = 0.025
+                col = (140, 195, 255) if self.has_relic("volt_step") else (95, 225, 245)
                 afterimages.append(Afterimage(self.rect, self.facing, col))
         else:
-            target_vx = move_dir * 440.0
-            accel = 3500.0 if self.on_ground else 2500.0
+            spd_bonus = 1.12 if self.resonance_tier >= 2 else 1.0
+            target_vx = move_dir * 450.0 * spd_bonus
+            accel = 3600.0 if self.on_ground else 2600.0
             if self.vx < target_vx:
                 self.vx = min(target_vx, self.vx + accel * dt)
             elif self.vx > target_vx:
@@ -771,21 +935,20 @@ class Player:
 
             if not self.jump_held and self.vy < -260.0:
                 self.vy += GRAVITY * 1.45 * dt
-            self.vy = min(1200.0, self.vy + GRAVITY * dt)
+            self.vy = min(1220.0, self.vy + GRAVITY * dt)
 
         prev_bottom = self.y + self.rect.height
         self.x += self.vx * dt
         self.y += self.vy * dt
 
-        if self.x < 36:
-            self.x = 36.0
+        if self.x < 38:
+            self.x = 38.0
             self.vx = 0.0
-        elif self.x > WIDTH - 36 - self.rect.width:
-            self.x = float(WIDTH - 36 - self.rect.width)
+        elif self.x > WIDTH - 38 - self.rect.width:
+            self.x = float(WIDTH - 38 - self.rect.width)
             self.vx = 0.0
 
         landed = False
-        # Проверка односторонних платформ
         if self.vy >= 0 and self.drop_through_timer <= 0 and not self.dive_active:
             new_bottom = self.y + self.rect.height
             test_rect = pygame.Rect(int(self.x + 4), int(self.y), self.rect.width - 8, self.rect.height)
@@ -796,7 +959,6 @@ class Player:
                     landed = True
                     break
 
-        # Пол арены
         if self.y + self.rect.height >= FLOOR_Y:
             self.y = float(FLOOR_Y - self.rect.height)
             self.vy = 0.0
@@ -804,36 +966,14 @@ class Player:
             if self.dive_active:
                 self.dive_active = False
                 self.invuln_timer = max(self.invuln_timer, 0.35)
-                dmg = int(52 * self.spell_mult)
-                scale = 1.25 if self.has_charm("shaman_stone") else 1.0
-                bw, bh = int(310 * scale), int(125 * scale)
-                spells.append(
-                    PlayerSpellBlast(
-                        self.rect.centerx - bw // 2,
-                        FLOOR_Y - bh,
-                        bw,
-                        bh,
-                        0,
-                        0,
-                        dmg,
-                        0.28,
-                        "dive_boom",
-                    )
-                )
-                shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, -620.0, height=54, life=0.6, color=(205, 235, 255), friendly=True, damage=int(24 * self.spell_mult)))
-                shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, 620.0, height=54, life=0.6, color=(205, 235, 255), friendly=True, damage=int(24 * self.spell_mult)))
-                for _ in range(34):
-                    particles.append(
-                        Particle(
-                            self.rect.centerx + random.uniform(-50, 50),
-                            FLOOR_Y - 6,
-                            random.uniform(-450, 450),
-                            random.uniform(-420, -60),
-                            (225, 245, 255),
-                            8,
-                            0.5,
-                        )
-                    )
+                dmg = int(54 * self.art_mult)
+                scale = 1.25 if self.has_relic("prism_lens") else 1.0
+                bw, bh = int(320 * scale), int(125 * scale)
+                arts.append(AstralArtBlast(self.rect.centerx - bw // 2, FLOOR_Y - bh, bw, bh, 0, 0, dmg, 0.28, "meteor"))
+                shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, -640.0, height=56, life=0.6, color=(110, 235, 255), friendly=True, damage=int(26 * self.art_mult)))
+                shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, 640.0, height=56, life=0.6, color=(110, 235, 255), friendly=True, damage=int(26 * self.art_mult)))
+                for _ in range(36):
+                    particles.append(Particle(self.rect.centerx + random.uniform(-50, 50), FLOOR_Y - 6, random.uniform(-460, 460), random.uniform(-430, -60), (140, 240, 255), 8, 0.5, glow=True))
 
         if landed:
             self.on_ground = True
@@ -844,57 +984,50 @@ class Player:
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
 
-        # Плащ
-        self.cape[0] = [self.rect.centerx - self.facing * 4, self.rect.top + 24]
-        for i in range(1, len(self.cape)):
-            px, py = self.cape[i - 1]
-            cx, cy = self.cape[i]
-            tx = px - self.facing * 7
-            ty = py + 5
-            self.cape[i][0] += (tx - cx) * min(1.0, 22.0 * dt)
-            self.cape[i][1] += (ty - cy) * min(1.0, 22.0 * dt)
+        # Физика шёлкового шарфа
+        self.scarf[0] = [self.rect.centerx - self.facing * 5, self.rect.top + 22]
+        for i in range(1, len(self.scarf)):
+            px, py = self.scarf[i - 1]
+            cx, cy = self.scarf[i]
+            tx = px - self.facing * 8
+            ty = py + 4 + math.sin(pygame.time.get_ticks() * 0.012 + i) * 1.5
+            self.scarf[i][0] += (tx - cx) * min(1.0, 24.0 * dt)
+            self.scarf[i][1] += (ty - cy) * min(1.0, 24.0 * dt)
 
     def draw(self, surf, ox, oy):
         if self.invuln_timer > 0 and not self.dive_active and int(self.invuln_timer * 22) % 2 == 0:
             return
 
-        pts = [(int(p[0] + ox), int(p[1] + oy)) for p in self.cape]
-        for i in range(len(pts) - 1):
-            w = max(4, 18 - i * 2)
-            pygame.draw.line(surf, (44, 52, 74), pts[i], pts[i + 1], w)
-
         r = self.rect.move(int(ox), int(oy))
-        body_rect = pygame.Rect(r.x + 6, r.y + 22, r.width - 12, r.height - 22)
-        pygame.draw.rect(surf, (18, 20, 30), body_rect, border_radius=6)
+        aura_col = (255, 215, 105) if self.resonance_tier == 3 else (95, 225, 245)
+        blit_glow(surf, r.centerx, r.centery, 48 + self.resonance_tier * 8, aura_col, 55 + self.resonance_tier * 12)
 
-        head_rect = pygame.Rect(r.x + 2, r.y + 4, r.width - 4, 24)
-        pygame.draw.rect(surf, (245, 248, 255), head_rect, border_radius=9)
+        # Развевающийся шарф
+        pts = [(int(p[0] + ox), int(p[1] + oy)) for p in self.scarf]
+        for i in range(len(pts) - 1):
+            w = max(3, 14 - i)
+            col = (255, 200, 95) if (self.resonance_tier == 3 and i > 3) else (65, 185, 225)
+            pygame.draw.line(surf, col, pts[i], pts[i + 1], w)
 
-        pygame.draw.polygon(
-            surf,
-            (245, 248, 255),
-            [(head_rect.left + 4, head_rect.top + 4), (head_rect.left - 2, head_rect.top - 12), (head_rect.left + 11, head_rect.top + 2)],
-        )
-        pygame.draw.polygon(
-            surf,
-            (245, 248, 255),
-            [(head_rect.right - 4, head_rect.top + 4), (head_rect.right + 2, head_rect.top - 12), (head_rect.right - 11, head_rect.top + 2)],
-        )
+        # Плащ-туника и доспех Странника
+        cloak = [(r.centerx, r.top + 18), (r.left + 2, r.bottom), (r.right - 2, r.bottom)]
+        pygame.draw.polygon(surf, (22, 30, 48), cloak)
+        pygame.draw.polygon(surf, (95, 215, 245), cloak, 2)
 
-        eye_off = 4 if self.facing == 1 else -4
-        pygame.draw.ellipse(surf, (12, 14, 20), (head_rect.centerx - 9 + eye_off, head_rect.centery - 4, 6, 9))
-        pygame.draw.ellipse(surf, (12, 14, 20), (head_rect.centerx + 3 + eye_off, head_rect.centery - 4, 6, 9))
+        # Капюшон и светящийся визор
+        hood = [(r.centerx, r.top), (r.left + 3, r.top + 18), (r.centerx, r.top + 25), (r.right - 3, r.top + 18)]
+        pygame.draw.polygon(surf, (238, 246, 255), hood)
+        visor_x = r.centerx + self.facing * 5
+        pygame.draw.line(surf, aura_col, (visor_x - 6, r.top + 14), (visor_x + 6, r.top + 14), 4)
 
-        s_rect = self.get_slash_rect()
-        if s_rect:
-            sr = s_rect.move(int(ox), int(oy))
-            pygame.draw.ellipse(surf, (185, 235, 255), sr, 6)
-            inner = sr.inflate(-14, -14)
-            if inner.width > 0 and inner.height > 0:
-                pygame.draw.ellipse(surf, (255, 255, 255), inner, 3)
+        # Визуальный щит Астрального Парирования
+        if self.parry_timer > 0:
+            blit_glow(surf, r.centerx, r.centery, 64, (255, 235, 140), 130)
+            pygame.draw.circle(surf, (255, 245, 180), r.center, 44, 4)
+            pygame.draw.circle(surf, (130, 235, 255), r.center, 36, 2)
 
 
-# --- ОБЫЧНЫЕ ВРАГИ (5 ТИПОВ) ---
+# --- 5 АВТОРСКИХ ПРОТИВНИКОВ ---
 class Enemy:
     def __init__(self, kind, x, y, depth):
         self.kind = kind
@@ -908,26 +1041,26 @@ class Enemy:
         self.state = "idle"
         scale = 1.0 + (depth - 1) * 0.16
 
-        if kind == "wanderer":
-            self.w, self.h = 38, 48
-            self.max_hp = int(34 * scale)
-            self.geo = 10
-        elif kind == "aspid":
+        if kind == "sentinel":
+            self.w, self.h = 40, 54
+            self.max_hp = int(38 * scale)
+            self.lumen = 12
+        elif kind == "prism_drone":
             self.w, self.h = 42, 42
-            self.max_hp = int(32 * scale)
-            self.geo = 14
-        elif kind == "shield_knight":
-            self.w, self.h = 48, 74
-            self.max_hp = int(58 * scale)
-            self.geo = 20
-        elif kind == "spore":
+            self.max_hp = int(34 * scale)
+            self.lumen = 15
+        elif kind == "aegis_warden":
+            self.w, self.h = 50, 76
+            self.max_hp = int(62 * scale)
+            self.lumen = 22
+        elif kind == "nova_orb":
             self.w, self.h = 36, 36
-            self.max_hp = int(24 * scale)
-            self.geo = 12
-        elif kind == "stalker":
-            self.w, self.h = 40, 56
-            self.max_hp = int(42 * scale)
-            self.geo = 16
+            self.max_hp = int(26 * scale)
+            self.lumen = 14
+        elif kind == "rift_assassin":
+            self.w, self.h = 40, 58
+            self.max_hp = int(44 * scale)
+            self.lumen = 18
 
         self.hp = self.max_hp
 
@@ -935,83 +1068,78 @@ class Enemy:
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
-    def update(self, dt, player, projectiles, particles):
+    def update(self, dt, hero, projectiles):
         self.flash = max(0.0, self.flash - dt)
         self.timer -= dt
-        dx = player.rect.centerx - self.rect.centerx
-        dy = player.rect.centery - self.rect.centery
+        dx = hero.rect.centerx - self.rect.centerx
+        dy = hero.rect.centery - self.rect.centery
         dist = math.hypot(dx, dy) or 1.0
 
-        if self.kind == "wanderer":
+        if self.kind == "sentinel":
             self.facing = 1 if dx > 0 else -1
-            self.vx = self.facing * 205.0
+            self.vx = self.facing * 210.0
             self.vy = min(1100.0, self.vy + GRAVITY * dt)
 
-        elif self.kind == "aspid":
+        elif self.kind == "prism_drone":
             self.facing = 1 if dx > 0 else -1
-            desired_y = max(130.0, player.rect.centery - 155.0)
-            self.vx = (dx / dist) * 145.0 if dist > 260 else -(dx / dist) * 90.0
+            desired_y = max(130.0, hero.rect.centery - 160.0)
+            self.vx = (dx / dist) * 150.0 if dist > 270 else -(dx / dist) * 95.0
             self.vy = (desired_y - self.y) * 2.5
             if self.timer <= 0:
-                self.timer = 2.1
+                self.timer = 2.0
                 base_ang = math.atan2(dy, dx)
-                for off in (-0.24, 0.0, 0.24):
+                for off in (-0.22, 0.0, 0.22):
                     ang = base_ang + off
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 390, math.sin(ang) * 390, 10, (255, 165, 55)))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 410, math.sin(ang) * 410, 10, (255, 115, 145)))
 
-        elif self.kind == "shield_knight":
+        elif self.kind == "aegis_warden":
             if self.state == "idle":
                 self.facing = 1 if dx > 0 else -1
                 self.vx = self.facing * 125.0
-                if abs(dx) < 170 and abs(dy) < 90 and self.timer <= 0:
+                if abs(dx) < 175 and abs(dy) < 95 and self.timer <= 0:
                     self.state = "windup"
                     self.timer = 0.45
                     self.vx = 0.0
-            elif self.state == "windup":
-                if self.timer <= 0:
-                    self.state = "strike"
-                    self.timer = 0.28
-                    self.vx = self.facing * 540.0
-            elif self.state == "strike":
-                if self.timer <= 0:
-                    self.state = "idle"
-                    self.timer = 0.85
+            elif self.state == "windup" and self.timer <= 0:
+                self.state = "strike"
+                self.timer = 0.28
+                self.vx = self.facing * 550.0
+            elif self.state == "strike" and self.timer <= 0:
+                self.state = "idle"
+                self.timer = 0.85
             self.vy = min(1100.0, self.vy + GRAVITY * dt)
 
-        elif self.kind == "spore":
-            self.vx = (dx / dist) * 165.0
-            self.vy = (dy / dist) * 165.0
-            if dist < 68 and self.state != "arming":
+        elif self.kind == "nova_orb":
+            self.vx = (dx / dist) * 170.0
+            self.vy = (dy / dist) * 170.0
+            if dist < 72 and self.state != "arming":
                 self.state = "arming"
                 self.timer = 0.45
             if self.state == "arming" and self.timer <= 0:
                 self.hp = 0
                 for i in range(8):
                     ang = (math.tau / 8) * i
-                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 330, math.sin(ang) * 330, 10, (255, 120, 60)))
+                    projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 340, math.sin(ang) * 340, 10, (255, 145, 80)))
 
-        elif self.kind == "stalker":
+        elif self.kind == "rift_assassin":
             if self.state == "idle":
                 self.facing = 1 if dx > 0 else -1
-                self.vx = self.facing * 170.0
-                if self.timer <= 0 and abs(dx) < 380:
+                self.vx = self.facing * 175.0
+                if self.timer <= 0 and abs(dx) < 390:
                     self.state = "prep"
                     self.timer = 0.42
                     self.vx = 0.0
-            elif self.state == "prep":
-                if self.timer <= 0:
-                    self.state = "dash"
-                    self.timer = 0.25
-                    self.vx = self.facing * 820.0
-            elif self.state == "dash":
-                if self.timer <= 0:
-                    self.state = "idle"
-                    self.timer = 1.1
+            elif self.state == "prep" and self.timer <= 0:
+                self.state = "dash"
+                self.timer = 0.24
+                self.vx = self.facing * 840.0
+            elif self.state == "dash" and self.timer <= 0:
+                self.state = "idle"
+                self.timer = 1.05
             self.vy = min(1100.0, self.vy + GRAVITY * dt)
 
         self.x += self.vx * dt
         self.y += self.vy * dt
-
         if self.x < 50:
             self.x = 50.0
             self.vx = 0.0
@@ -1019,7 +1147,7 @@ class Enemy:
             self.x = float(WIDTH - 50 - self.w)
             self.vx = 0.0
 
-        if self.kind not in ("aspid", "spore"):
+        if self.kind not in ("prism_drone", "nova_orb"):
             if self.y + self.h >= FLOOR_Y:
                 self.y = float(FLOOR_Y - self.h)
                 self.vy = 0.0
@@ -1030,49 +1158,47 @@ class Enemy:
         r = self.rect.move(int(ox), int(oy))
         flash_col = (255, 255, 255)
 
-        if self.kind == "wanderer":
-            col = flash_col if self.flash > 0 else (55, 65, 95)
+        if self.kind == "sentinel":
+            col = flash_col if self.flash > 0 else (38, 46, 72)
+            pygame.draw.polygon(surf, col, [(r.centerx, r.top), (r.right, r.centery), (r.right - 6, r.bottom), (r.left + 6, r.bottom), (r.left, r.centery)])
+            pygame.draw.circle(surf, (255, 115, 135), (r.centerx + self.facing * 8, r.y + 18), 4)
+
+        elif self.kind == "prism_drone":
+            col = flash_col if self.flash > 0 else (180, 65, 105)
+            blit_glow(surf, r.centerx, r.centery, 36, (255, 95, 135), 65)
+            pygame.draw.polygon(surf, col, [(r.centerx, r.top), (r.right, r.centery), (r.centerx, r.bottom), (r.left, r.centery)])
+            pygame.draw.circle(surf, (255, 235, 160), r.center, 6)
+
+        elif self.kind == "aegis_warden":
+            col = flash_col if self.flash > 0 else (34, 42, 66)
             pygame.draw.rect(surf, col, r, border_radius=10)
-            pygame.draw.circle(surf, (255, 150, 70), (r.centerx + self.facing * 8, r.y + 16), 4)
+            sx = r.right - 2 if self.facing == 1 else r.left - 12
+            shield_r = pygame.Rect(sx, r.y + 8, 14, r.height - 14)
+            pygame.draw.rect(surf, (135, 225, 255), shield_r, border_radius=4)
+            pygame.draw.circle(surf, (255, 130, 145), (r.centerx + self.facing * 8, r.y + 18), 4)
 
-        elif self.kind == "aspid":
-            col = flash_col if self.flash > 0 else (185, 95, 45)
-            pygame.draw.ellipse(surf, col, r)
-            wing_y = r.top - 6 + int(math.sin(pygame.time.get_ticks() * 0.03) * 5)
-            pygame.draw.ellipse(surf, (220, 235, 255), (r.left - 8, wing_y, 20, 12))
-            pygame.draw.ellipse(surf, (220, 235, 255), (r.right - 12, wing_y, 20, 12))
-            pygame.draw.circle(surf, (255, 230, 120), (r.centerx + self.facing * 8, r.centery), 4)
-
-        elif self.kind == "shield_knight":
-            col = flash_col if self.flash > 0 else (40, 50, 75)
-            pygame.draw.rect(surf, col, r, border_radius=12)
-            # Большой щит спереди (подсказка игроку: обходи или бей сверху!)
-            sx = r.right - 4 if self.facing == 1 else r.left - 10
-            shield_r = pygame.Rect(sx, r.y + 10, 14, r.height - 16)
-            pygame.draw.rect(surf, (175, 195, 225), shield_r, border_radius=5)
-            pygame.draw.circle(surf, (120, 220, 255), (r.centerx + self.facing * 8, r.y + 18), 4)
-
-        elif self.kind == "spore":
-            col = flash_col if self.flash > 0 else ((255, 90, 60) if self.state == "arming" else (210, 120, 55))
+        elif self.kind == "nova_orb":
+            col = flash_col if self.flash > 0 else ((255, 95, 70) if self.state == "arming" else (215, 125, 65))
+            blit_glow(surf, r.centerx, r.centery, 34, col, 75)
             pygame.draw.circle(surf, col, r.center, self.w // 2)
-            pygame.draw.circle(surf, (255, 225, 140), r.center, self.w // 4)
+            pygame.draw.circle(surf, (255, 240, 180), r.center, self.w // 4)
 
-        elif self.kind == "stalker":
-            col = flash_col if self.flash > 0 else (75, 42, 115)
-            pygame.draw.rect(surf, col, r, border_radius=9)
-            pygame.draw.circle(surf, (230, 120, 255), (r.centerx + self.facing * 9, r.y + 16), 4)
+        elif self.kind == "rift_assassin":
+            col = flash_col if self.flash > 0 else (68, 36, 105)
+            pygame.draw.polygon(surf, col, [(r.centerx, r.top), (r.right, r.bottom), (r.left, r.bottom)])
+            pygame.draw.circle(surf, (220, 130, 255), (r.centerx + self.facing * 8, r.y + 20), 4)
             if self.state == "prep":
-                pygame.draw.line(surf, (230, 120, 255), r.center, (r.centerx + self.facing * 260, r.centery), 2)
+                pygame.draw.line(surf, (220, 130, 255), r.center, (r.centerx + self.facing * 270, r.centery), 2)
 
 
-# --- 5 УНИКАЛЬНЫХ БОССОВ ---
+# --- 5 АВТОРСКИХ БОССОВ ---
 class Boss:
     TYPES = [
-        ("juggernaut", "ЛОЖНЫЙ РЫЦАРЬ ПУСТОТЫ", (225, 55, 85), (255, 145, 165)),
-        ("weaver", "БАГРОВАЯ ТАНЦОВЩИЦА", (245, 70, 120), (255, 185, 210)),
-        ("watcher", "КРИСТАЛЬНЫЙ СТРАЖ БЕЗДНЫ", (185, 85, 255), (235, 180, 255)),
-        ("mantis", "ПОВЕЛИТЕЛЬ БОГОМОЛОВ", (55, 215, 155), (170, 255, 220)),
-        ("radiance", "ЛУЧЕЗАРНОСТЬ ПУСТОТЫ", (255, 195, 65), (255, 245, 185)),
+        ("colossus", "АСТРАЛЬНЫЙ КОЛОСС", (235, 155, 65), (255, 225, 145)),
+        ("seraph", "СЕРАФИМ ПЕПЛА", (245, 75, 115), (255, 185, 205)),
+        ("arbiter", "ХРАНИТЕЛЬ ЧАСОВ", (175, 95, 255), (225, 185, 255)),
+        ("leviathan", "ЛЕВИАФАН БЕЗДНЫ", (65, 220, 185), (175, 255, 235)),
+        ("solaris", "СОЛЯРИС, СЕРДЦЕ ЗАТМЕНИЯ", (255, 205, 75), (255, 248, 195)),
     ]
 
     def __init__(self, depth):
@@ -1080,11 +1206,11 @@ class Boss:
         idx = (depth - 1) % len(self.TYPES)
         tier = (depth - 1) // len(self.TYPES)
         self.kind, base_name, self.primary, self.glow = self.TYPES[idx]
-        suffix = f" • ВОЗНЕСЕНИЕ {tier}" if tier > 0 else ""
+        suffix = f" [ЦИКЛ {tier + 1}]" if tier > 0 else ""
         self.name = f"{base_name}{suffix}"
 
-        w, h = (96, 134) if self.kind == "juggernaut" else ((84, 124) if self.kind == "radiance" else (74, 122))
-        start_y = 210 if self.kind == "radiance" else (FLOOR_Y - h)
+        w, h = (98, 136) if self.kind == "colossus" else ((88, 126) if self.kind == "solaris" else (76, 124))
+        start_y = 205 if self.kind == "solaris" else (FLOOR_Y - h)
         self.rect = pygame.Rect(910, start_y, w, h)
         self.x = float(self.rect.x)
         self.y = float(self.rect.y)
@@ -1092,9 +1218,9 @@ class Boss:
         self.vy = 0.0
         self.facing = -1
 
-        self.max_hp = int((270 + (depth - 1) * 115))
+        self.max_hp = int(285 + (depth - 1) * 120)
         self.hp = self.max_hp
-        self.stagger_hits = 0
+        self.poise_hits = 0
 
         self.state = "idle"
         self.timer = 1.0
@@ -1112,15 +1238,15 @@ class Boss:
     def take_damage(self, amount):
         self.hp = max(0, self.hp - amount)
         self.flash = 0.08
-        if self.kind != "radiance":
-            self.stagger_hits += 1
-            if self.stagger_hits >= 16 and self.hp > 0 and self.state != "stagger":
-                self.stagger_hits = 0
+        if self.kind != "solaris":
+            self.poise_hits += 1
+            if self.poise_hits >= 16 and self.hp > 0 and self.state != "stagger":
+                self.poise_hits = 0
                 self.state = "stagger"
-                self.timer = 1.5
+                self.timer = 1.45
                 self.vx = 0.0
 
-    def update(self, dt, player, projectiles, shockwaves, lasers, enemies, particles):
+    def update(self, dt, hero, projectiles, shockwaves, lasers, particles):
         self.flash = max(0.0, self.flash - dt)
         self.timer -= dt
         spd_mult = (1.24 if self.phase2 else 1.0) + min(0.35, (self.depth - 1) * 0.04)
@@ -1130,12 +1256,12 @@ class Boss:
             if self.clone_timer <= 0:
                 self.clone_rect = None
 
-        # --- 1. ЛОЖНЫЙ РЫЦАРЬ ПУСТОТЫ ---
-        if self.kind == "juggernaut":
+        # 1. АСТРАЛЬНЫЙ КОЛОСС
+        if self.kind == "colossus":
             if self.state == "idle":
-                self.facing = 1 if player.rect.centerx > self.rect.centerx else -1
+                self.facing = 1 if hero.rect.centerx > self.rect.centerx else -1
                 if self.timer <= 0:
-                    pick = random.choice(["slam", "charge", "wave_spam"])
+                    pick = random.choice(["slam", "charge", "eruption"])
                     if pick == "slam":
                         self.state = "slam_prep"
                         self.timer = 0.42 / spd_mult
@@ -1144,12 +1270,12 @@ class Boss:
                         self.timer = 0.48 / spd_mult
                         self.combo = 2 if self.phase2 else 1
                     else:
-                        self.state = "smash_ground"
+                        self.state = "eruption_prep"
                         self.timer = 0.45 / spd_mult
             elif self.state == "slam_prep" and self.timer <= 0:
                 self.state = "slam_air"
                 self.vy = -1280.0
-                self.target_x = float(player.rect.centerx - self.rect.width // 2)
+                self.target_x = float(hero.rect.centerx - self.rect.width // 2)
             elif self.state == "slam_air":
                 self.vy += GRAVITY * 0.95 * dt
                 self.x += (self.target_x - self.x) * min(1.0, 6.2 * dt)
@@ -1159,17 +1285,16 @@ class Boss:
                     wspd = 520.0 * spd_mult
                     shockwaves.append(Shockwave(self.rect.left, FLOOR_Y, -wspd, color=self.primary))
                     shockwaves.append(Shockwave(self.rect.right, FLOOR_Y, wspd, color=self.primary))
-                    # Обвал метеоров с потолка во 2-й фазе
                     for _ in range(5 if self.phase2 else 2):
-                        projectiles.append(Projectile(random.randint(120, WIDTH - 120), 60, 0, random.uniform(360, 520), 15, self.glow))
+                        projectiles.append(Projectile(random.randint(120, WIDTH - 120), 60, 0, random.uniform(370, 520), 15, self.glow))
                     self.state = "idle"
                     self.timer = 0.85 / spd_mult
             elif self.state == "charge_prep":
-                self.facing = 1 if player.rect.centerx > self.rect.centerx else -1
+                self.facing = 1 if hero.rect.centerx > self.rect.centerx else -1
                 if self.timer <= 0:
                     self.state = "charge"
                     self.timer = 0.36
-                    self.vx = self.facing * 890.0 * spd_mult
+                    self.vx = self.facing * 900.0 * spd_mult
             elif self.state == "charge" and self.timer <= 0:
                 self.vx = 0.0
                 self.combo -= 1
@@ -1179,51 +1304,48 @@ class Boss:
                 else:
                     self.state = "idle"
                     self.timer = 0.75 / spd_mult
-            elif self.state == "smash_ground" and self.timer <= 0:
+            elif self.state == "eruption_prep" and self.timer <= 0:
                 wspd = 600.0 * spd_mult
-                shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, self.facing * wspd, height=84, color=self.primary))
+                shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, self.facing * wspd, height=86, color=self.primary))
                 if self.phase2:
-                    shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, -self.facing * wspd, height=84, color=self.primary))
+                    shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, -self.facing * wspd, height=86, color=self.primary))
                 self.state = "idle"
                 self.timer = 0.8 / spd_mult
             elif self.state == "stagger" and self.timer <= 0:
                 self.state = "idle"
                 self.timer = 0.4
 
-        # --- 2. БАГРОВАЯ ТАНЦОВЩИЦА (Хорнет-стиль) ---
-        elif self.kind == "weaver":
+        # 2. СЕРАФИМ ПЕПЛА
+        elif self.kind == "seraph":
             if self.state == "idle":
-                self.facing = 1 if player.rect.centerx > self.rect.centerx else -1
+                self.facing = 1 if hero.rect.centerx > self.rect.centerx else -1
                 if self.timer <= 0:
-                    pick = random.choice(["lunge", "needle_throw", "air_dive", "thread_storm"])
+                    pick = random.choice(["lunge", "chakram", "sky_dive", "feather_nova"])
                     if pick == "lunge":
                         self.state = "lunge_prep"
                         self.timer = 0.4 / spd_mult
-                    elif pick == "needle_throw":
+                    elif pick == "chakram":
                         self.state = "throw_prep"
                         self.timer = 0.42 / spd_mult
-                    elif pick == "air_dive":
+                    elif pick == "sky_dive":
                         self.state = "jump_up"
                         self.vy = -1150.0
                         self.vx = self.facing * 240.0
                     else:
-                        self.state = "storm_jump"
+                        self.state = "nova_jump"
                         self.vy = -1050.0
             elif self.state == "lunge_prep":
-                self.facing = 1 if player.rect.centerx > self.rect.centerx else -1
+                self.facing = 1 if hero.rect.centerx > self.rect.centerx else -1
                 if self.timer <= 0:
                     self.state = "lunge"
                     self.timer = 0.28
-                    self.vx = self.facing * 1060.0 * spd_mult
+                    self.vx = self.facing * 1080.0 * spd_mult
             elif self.state == "lunge" and self.timer <= 0:
                 self.vx = 0.0
                 self.state = "idle"
                 self.timer = 0.65 / spd_mult
             elif self.state == "throw_prep" and self.timer <= 0:
-                # Бросок иглы-бумеранга через арену!
-                projectiles.append(
-                    Projectile(self.rect.centerx, self.rect.centery, self.facing * 920.0, 0.0, 14, self.glow, boomerang=True, owner=self)
-                )
+                projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 930.0, 0.0, 14, self.glow, boomerang=True, owner=self))
                 self.state = "idle"
                 self.timer = 1.05 / spd_mult
             elif self.state == "jump_up" and self.vy >= -80:
@@ -1231,11 +1353,11 @@ class Boss:
                 self.timer = 0.28 / spd_mult
                 self.vx = 0.0
                 self.vy = 0.0
-                dx = player.rect.centerx - self.rect.centerx
-                dy = player.rect.centery - self.rect.centery
+                dx = hero.rect.centerx - self.rect.centerx
+                dy = hero.rect.centery - self.rect.centery
                 ang = math.atan2(max(80.0, dy), dx)
-                self.target_x = math.cos(ang) * 1080.0 * spd_mult
-                self.target_y = math.sin(ang) * 1080.0 * spd_mult
+                self.target_x = math.cos(ang) * 1100.0 * spd_mult
+                self.target_y = math.sin(ang) * 1100.0 * spd_mult
             elif self.state == "dive_prep" and self.timer <= 0:
                 self.state = "diving"
                 self.vx = self.target_x
@@ -1246,16 +1368,16 @@ class Boss:
                 self.vy = 0.0
                 self.state = "idle"
                 self.timer = 0.65 / spd_mult
-            elif self.state == "storm_jump" and self.vy >= -60:
-                self.state = "storm_active"
-                self.timer = 0.75
+            elif self.state == "nova_jump" and self.vy >= -60:
+                self.state = "nova_active"
+                self.timer = 0.72
                 self.vx = 0.0
                 self.vy = 0.0
                 count = 10 if self.phase2 else 6
                 for i in range(count):
                     ang = (math.tau / count) * i
                     projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 440, math.sin(ang) * 440, 11, self.primary))
-            elif self.state == "storm_active":
+            elif self.state == "nova_active":
                 self.vy = 0.0
                 if self.timer <= 0:
                     self.state = "idle"
@@ -1264,29 +1386,28 @@ class Boss:
                 self.state = "idle"
                 self.timer = 0.35
 
-        # --- 3. КРИСТАЛЬНЫЙ СТРАЖ БЕЗДНЫ (Лазеры и телепорты) ---
-        elif self.kind == "watcher":
+        # 3. ХРАНИТЕЛЬ ЧАСОВ
+        elif self.kind == "arbiter":
             if self.state == "idle":
-                self.facing = 1 if player.rect.centerx > self.rect.centerx else -1
+                self.facing = 1 if hero.rect.centerx > self.rect.centerx else -1
                 if self.timer <= 0:
-                    pick = random.choice(["laser_aim", "laser_cross", "teleport_strike"])
-                    if pick == "laser_aim":
+                    pick = random.choice(["chrono_beam", "grid_lasers", "blink"])
+                    if pick == "chrono_beam":
                         self.state = "laser_aim"
                         self.timer = 0.72 / spd_mult
-                        ang = math.atan2(player.rect.centery - self.rect.centery, player.rect.centerx - self.rect.centerx)
+                        ang = math.atan2(hero.rect.centery - self.rect.centery, hero.rect.centerx - self.rect.centerx)
                         lasers.append(LaserBeam(self.rect.centerx, self.rect.centery - 15, ang, warn_time=0.62 / spd_mult, color=self.glow))
                         if self.phase2:
-                            lasers.append(LaserBeam(self.rect.centerx, self.rect.centery - 15, ang + 0.28, warn_time=0.62 / spd_mult, color=self.glow))
-                            lasers.append(LaserBeam(self.rect.centerx, self.rect.centery - 15, ang - 0.28, warn_time=0.62 / spd_mult, color=self.glow))
-                    elif pick == "laser_cross":
+                            lasers.append(LaserBeam(self.rect.centerx, self.rect.centery - 15, ang + 0.27, warn_time=0.62 / spd_mult, color=self.glow))
+                            lasers.append(LaserBeam(self.rect.centerx, self.rect.centery - 15, ang - 0.27, warn_time=0.62 / spd_mult, color=self.glow))
+                    elif pick == "grid_lasers":
                         self.state = "laser_aim"
                         self.timer = 0.78 / spd_mult
-                        for lx in (240, 520, 800, 1060):
+                        for lx in (230, 510, 790, 1070):
                             lasers.append(LaserBeam(lx, 40, math.pi / 2, warn_time=0.68 / spd_mult, color=self.primary))
                     else:
-                        # Телепорт на другую сторону арены
-                        for _ in range(18):
-                            particles.append(Particle(self.rect.centerx, self.rect.centery, random.uniform(-220, 220), random.uniform(-220, 220), self.glow, 7, 0.4))
+                        for _ in range(20):
+                            particles.append(Particle(self.rect.centerx, self.rect.centery, random.uniform(-240, 240), random.uniform(-240, 240), self.glow, 7, 0.4, glow=True))
                         self.x = float(random.choice([140, 590, 1020]))
                         self.state = "idle"
                         self.timer = 0.48 / spd_mult
@@ -1297,36 +1418,35 @@ class Boss:
                 self.state = "idle"
                 self.timer = 0.4
 
-        # --- 4. ПОВЕЛИТЕЛЬ БОГОМОЛОВ (Клоны и быстрые рывки) ---
-        elif self.kind == "mantis":
+        # 4. ЛЕВИАФАН БЕЗДНЫ
+        elif self.kind == "leviathan":
             if self.state == "idle":
-                self.facing = 1 if player.rect.centerx > self.rect.centerx else -1
+                self.facing = 1 if hero.rect.centerx > self.rect.centerx else -1
                 if self.timer <= 0:
-                    pick = random.choice(["dash_slash", "air_drop", "wind_scythe"])
-                    if pick == "dash_slash":
+                    pick = random.choice(["dash_lance", "sky_pierce", "tidal_blades"])
+                    if pick == "dash_lance":
                         self.state = "dash_prep"
                         self.timer = 0.38 / spd_mult
                         if self.phase2:
-                            # Призыв теневого двойника с противоположной стороны!
                             cx = 1120 if self.x < 600 else 90
                             self.clone_rect = pygame.Rect(cx, FLOOR_Y - self.rect.height, self.rect.width, self.rect.height)
                             self.clone_timer = 0.75
-                    elif pick == "air_drop":
-                        self.x = float(max(80, min(WIDTH - 160, player.rect.centerx - self.rect.width // 2)))
+                    elif pick == "sky_pierce":
+                        self.x = float(max(80, min(WIDTH - 160, hero.rect.centerx - self.rect.width // 2)))
                         self.y = 110.0
                         self.vy = 0.0
                         self.state = "drop_prep"
                         self.timer = 0.36 / spd_mult
                     else:
-                        self.state = "scythe_prep"
+                        self.state = "blades_prep"
                         self.timer = 0.42 / spd_mult
             elif self.state == "dash_prep" and self.timer <= 0:
                 self.state = "dashing"
                 self.timer = 0.3
-                self.vx = self.facing * 1080.0 * spd_mult
+                self.vx = self.facing * 1090.0 * spd_mult
                 if self.clone_rect:
-                    cdir = 1 if player.rect.centerx > self.clone_rect.centerx else -1
-                    projectiles.append(Projectile(self.clone_rect.centerx, self.clone_rect.centery, cdir * 620.0, 0, 14, self.glow))
+                    cdir = 1 if hero.rect.centerx > self.clone_rect.centerx else -1
+                    projectiles.append(Projectile(self.clone_rect.centerx, self.clone_rect.centery, cdir * 630.0, 0, 14, self.glow))
             elif self.state == "dashing" and self.timer <= 0:
                 self.vx = 0.0
                 self.state = "idle"
@@ -1335,63 +1455,52 @@ class Boss:
                 self.vy = 0.0
                 if self.timer <= 0:
                     self.state = "dropping"
-                    self.vy = 1380.0
+                    self.vy = 1400.0
             elif self.state == "dropping" and self.y + self.rect.height >= FLOOR_Y:
                 self.y = float(FLOOR_Y - self.rect.height)
                 self.vy = 0.0
-                shockwaves.append(Shockwave(self.rect.left, FLOOR_Y, -540.0, height=48, color=self.primary))
-                shockwaves.append(Shockwave(self.rect.right, FLOOR_Y, 540.0, height=48, color=self.primary))
+                shockwaves.append(Shockwave(self.rect.left, FLOOR_Y, -550.0, height=50, color=self.primary))
+                shockwaves.append(Shockwave(self.rect.right, FLOOR_Y, 550.0, height=50, color=self.primary))
                 self.state = "idle"
                 self.timer = 0.62 / spd_mult
-            elif self.state == "scythe_prep" and self.timer <= 0:
+            elif self.state == "blades_prep" and self.timer <= 0:
                 for row_y in (FLOOR_Y - 34, FLOOR_Y - 115):
-                    projectiles.append(Projectile(self.rect.centerx, row_y, self.facing * 560.0 * spd_mult, 0, 13, self.glow))
+                    projectiles.append(Projectile(self.rect.centerx, row_y, self.facing * 570.0 * spd_mult, 0, 13, self.glow))
                 self.state = "idle"
                 self.timer = 0.72 / spd_mult
             elif self.state == "stagger" and self.timer <= 0:
                 self.state = "idle"
                 self.timer = 0.35
 
-        # --- 5. ЛУЧЕЗАРНОСТЬ ПУСТОТЫ (Парящий финальный босс) ---
-        elif self.kind == "radiance":
-            # Плавное парение над ареной
+        # 5. СОЛЯРИС, СЕРДЦЕ ЗАТМЕНИЯ
+        elif self.kind == "solaris":
             hover_x = 640 + math.sin(pygame.time.get_ticks() * 0.0014) * 320 - self.rect.width // 2
-            hover_y = 185 + math.cos(pygame.time.get_ticks() * 0.0022) * 35
+            hover_y = 180 + math.cos(pygame.time.get_ticks() * 0.0022) * 34
             self.x += (hover_x - self.x) * min(1.0, 2.2 * dt)
             self.y += (hover_y - self.y) * min(1.0, 2.5 * dt)
             self.vy = 0.0
 
             if self.state == "idle" and self.timer <= 0:
-                pick = random.choice(["sunburst", "light_wall", "homing_orbs", "radial_lasers"])
-                if pick == "sunburst":
+                pick = random.choice(["corona_burst", "eclipse_wall", "star_seekers", "constellation"])
+                if pick == "corona_burst":
                     count = 12 if self.phase2 else 8
                     base = random.uniform(0, 0.5)
                     for i in range(count):
                         ang = base + (math.tau / count) * i
-                        projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 430, math.sin(ang) * 430, 12, self.glow))
+                        projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 435, math.sin(ang) * 435, 12, self.glow))
                     self.timer = 1.15 / spd_mult
-                elif pick == "light_wall":
+                elif pick == "eclipse_wall":
                     side = random.choice([-1, 1])
                     sx = 80 if side == 1 else WIDTH - 80
                     for py in range(150, FLOOR_Y, 85):
-                        if abs(py - (FLOOR_Y - 140)) > 60:  # оставляем окно для прохода!
-                            projectiles.append(Projectile(sx, py, side * 420 * spd_mult, 0, 14, self.primary))
+                        if abs(py - (FLOOR_Y - 140)) > 60:
+                            projectiles.append(Projectile(sx, py, side * 425 * spd_mult, 0, 14, self.primary))
                     self.timer = 1.35 / spd_mult
-                elif pick == "homing_orbs":
+                elif pick == "star_seekers":
                     for _ in range(3 if self.phase2 else 2):
-                        projectiles.append(
-                            Projectile(
-                                self.rect.centerx + random.uniform(-120, 120),
-                                self.rect.centery,
-                                random.uniform(-180, 180),
-                                -120,
-                                14,
-                                (255, 230, 130),
-                                homing=True,
-                            )
-                        )
+                        projectiles.append(Projectile(self.rect.centerx + random.uniform(-120, 120), self.rect.centery, random.uniform(-180, 180), -120, 14, (255, 235, 145), homing=True))
                     self.timer = 1.4 / spd_mult
-                elif pick == "radial_lasers":
+                elif pick == "constellation":
                     count = 6 if self.phase2 else 4
                     base = random.uniform(0.2, 1.2)
                     for i in range(count):
@@ -1399,13 +1508,11 @@ class Boss:
                         lasers.append(LaserBeam(self.rect.centerx, self.rect.centery, ang, warn_time=0.72 / spd_mult, color=self.glow))
                     self.timer = 1.3 / spd_mult
 
-        # Физика и границы босса
-        if self.kind != "radiance" and self.state not in ("slam_air", "diving", "storm_active", "drop_prep"):
+        if self.kind != "solaris" and self.state not in ("slam_air", "diving", "nova_active", "drop_prep"):
             self.vy = min(1150.0, self.vy + GRAVITY * dt)
 
         self.x += self.vx * dt
         self.y += self.vy * dt
-
         if self.x < 55:
             self.x = 55.0
             self.vx = 0.0
@@ -1413,7 +1520,7 @@ class Boss:
             self.x = float(WIDTH - 55 - self.rect.width)
             self.vx = 0.0
 
-        if self.kind != "radiance" and self.y + self.rect.height >= FLOOR_Y:
+        if self.kind != "solaris" and self.y + self.rect.height >= FLOOR_Y:
             self.y = float(FLOOR_Y - self.rect.height)
             self.vy = 0.0
 
@@ -1421,316 +1528,336 @@ class Boss:
         self.rect.y = int(self.y)
 
     def draw(self, surf, ox, oy):
-        # Теневой двойник (для Повелителя Богомолов)
+        t = pygame.time.get_ticks() * 0.003
         if self.clone_rect:
             cr = self.clone_rect.move(int(ox), int(oy))
-            pygame.draw.rect(surf, (45, 25, 70), cr, border_radius=12)
-            pygame.draw.rect(surf, self.glow, cr, 3, border_radius=12)
+            blit_glow(surf, cr.centerx, cr.centery, 65, self.glow, 70)
+            pygame.draw.polygon(surf, (45, 25, 75), [(cr.centerx, cr.top), (cr.right, cr.centery), (cr.centerx, cr.bottom), (cr.left, cr.centery)])
+            pygame.draw.polygon(surf, self.glow, [(cr.centerx, cr.top), (cr.right, cr.centery), (cr.centerx, cr.bottom), (cr.left, cr.centery)], 3)
 
         r = self.rect.move(int(ox), int(oy))
         if self.state == "stagger":
             r = pygame.Rect(r.x, r.y + 34, r.width, r.height - 34)
 
-        body_col = (255, 255, 255) if self.flash > 0 else (26, 20, 36)
+        blit_glow(surf, r.centerx, r.centery, 95 if self.phase2 else 75, self.primary, 85)
+        body_col = (255, 255, 255) if self.flash > 0 else (24, 20, 38)
         trim_col = (255, 255, 255) if self.flash > 0 else self.primary
 
-        if self.phase2:
-            pygame.draw.rect(surf, self.primary, r.inflate(20, 20), 2, border_radius=18)
+        # Вращающиеся астрономические кольца за спиной босса
+        ring_r = 68 if self.phase2 else 54
+        pygame.draw.circle(surf, self.glow, r.center, ring_r, 2)
+        for i in range(4):
+            ang = t * (1.5 if self.phase2 else 0.9) + i * (math.pi / 2)
+            ox_r = r.centerx + int(math.cos(ang) * ring_r)
+            oy_r = r.centery + int(math.sin(ang) * ring_r)
+            pygame.draw.circle(surf, self.glow, (ox_r, oy_r), 5)
 
-        # Крылья / нимб у Лучезарности
-        if self.kind == "radiance":
-            pygame.draw.circle(surf, self.glow, r.center, 74, 3)
-            pygame.draw.polygon(surf, self.primary, [(r.left, r.centery), (r.left - 58, r.top - 10), (r.left + 8, r.top + 18)])
-            pygame.draw.polygon(surf, self.primary, [(r.right, r.centery), (r.right + 58, r.top - 10), (r.right - 8, r.top + 18)])
+        # Крылья для Серафима и Соляриса
+        if self.kind in ("seraph", "solaris"):
+            flap = math.sin(t * 2.2) * 14
+            for side in (-1, 1):
+                wx = r.right if side == 1 else r.left
+                pygame.draw.polygon(surf, self.primary, [(wx, r.centery - 10), (wx + side * 66, r.top - 22 + flap), (wx + side * 44, r.centery + 10)])
+                pygame.draw.polygon(surf, self.glow, [(wx, r.centery + 6), (wx + side * 52, r.centery + 24 - flap), (wx + side * 24, r.bottom)])
 
-        pygame.draw.rect(surf, body_col, r, border_radius=15)
-        pygame.draw.rect(surf, trim_col, r, 4, border_radius=15)
+        # Многогранный силуэт доспеха
+        chassis = [
+            (r.centerx, r.top),
+            (r.right, r.top + 28),
+            (r.right - 8, r.bottom),
+            (r.left + 8, r.bottom),
+            (r.left, r.top + 28),
+        ]
+        pygame.draw.polygon(surf, body_col, chassis)
+        pygame.draw.polygon(surf, trim_col, chassis, 3)
 
-        mask_r = pygame.Rect(r.x + 12, r.y + 12, r.width - 24, 34)
-        pygame.draw.rect(surf, (240, 242, 252), mask_r, border_radius=10)
-        pygame.draw.polygon(surf, trim_col, [(mask_r.left + 4, mask_r.top + 4), (mask_r.left - 14, mask_r.top - 28), (mask_r.left + 18, mask_r.top + 4)])
-        pygame.draw.polygon(surf, trim_col, [(mask_r.right - 4, mask_r.top + 4), (mask_r.right + 14, mask_r.top - 28), (mask_r.right - 18, mask_r.top + 4)])
-
-        eye_x = mask_r.centerx + self.facing * 8
-        pygame.draw.circle(surf, trim_col, (eye_x - 8, mask_r.centery), 5)
-        pygame.draw.circle(surf, trim_col, (eye_x + 8, mask_r.centery), 5)
+        # Корона / Визор
+        crown = [(r.centerx - 18, r.top + 22), (r.centerx - 12, r.top - 14), (r.centerx, r.top + 10), (r.centerx + 12, r.top - 14), (r.centerx + 18, r.top + 22)]
+        pygame.draw.polygon(surf, trim_col, crown)
+        eye_x = r.centerx + self.facing * 10
+        pygame.draw.line(surf, (255, 250, 255), (eye_x - 10, r.top + 32), (eye_x + 10, r.top + 32), 4)
 
         if self.state in ("charge_prep", "lunge_prep", "dash_prep"):
-            pygame.draw.line(surf, self.glow, (r.centerx, r.centery), (r.centerx + self.facing * 540, r.centery), 3)
+            pygame.draw.line(surf, self.glow, (r.centerx, r.centery), (r.centerx + self.facing * 560, r.centery), 3)
 
 
-# --- ГЕНЕРАТОР КОМНАТ И ЭТАЖЕЙ ---
+# --- ГЕНЕРАТОР КОМНАТ ---
 def build_room(depth, room_idx):
-    """
-    room_idx:
-      0 -> Святилище со Скамьёй Древних (безопасный хаб)
-      1, 2 -> Боевые залы с платформами, шипами, жилами Гео и врагами
-      3 -> Чертог Босса
-    """
-    platforms = []
-    spikes = []
-    deposits = []
-    enemies = []
-    bench_rect = None
+    platforms, hazards, clusters, enemies = [], [], [], []
+    obelisk_rect = None
 
     if room_idx == 0:
-        bench_rect = pygame.Rect(580, FLOOR_Y - 38, 120, 38)
-        platforms.append(Platform(240, 455, 190))
-        platforms.append(Platform(850, 455, 190))
-        return "sanctuary", platforms, spikes, deposits, enemies, bench_rect
+        obelisk_rect = pygame.Rect(610, FLOOR_Y - 128, 60, 128)
+        platforms = [Platform(220, 445, 200), Platform(860, 445, 200)]
+        return "sanctuary", platforms, hazards, clusters, enemies, obelisk_rect
 
     if room_idx in (1, 2):
         layout = (depth + room_idx) % 3
         if layout == 0:
-            platforms = [Platform(190, 470, 220), Platform(530, 355, 220), Platform(870, 470, 220)]
-            spikes = [SpikeHazard(450, FLOOR_Y, 380)]
-            deposits = [GeoDeposit(640, 355)]
+            platforms = [Platform(180, 465, 220), Platform(530, 350, 220), Platform(880, 465, 220)]
+            hazards = [CrystalHazard(440, FLOOR_Y, 400)]
+            clusters = [LumenCluster(640, 350)]
         elif layout == 1:
-            platforms = [Platform(150, 485, 210), Platform(430, 385, 190), Platform(710, 295, 210), Platform(940, 445, 210)]
-            spikes = [SpikeHazard(360, FLOOR_Y, 220), SpikeHazard(740, FLOOR_Y, 220)]
-            deposits = [GeoDeposit(815, 295), GeoDeposit(1050, FLOOR_Y)]
+            platforms = [Platform(140, 475, 210), Platform(430, 375, 190), Platform(720, 285, 210), Platform(950, 440, 210)]
+            hazards = [CrystalHazard(355, FLOOR_Y, 220), CrystalHazard(745, FLOOR_Y, 220)]
+            clusters = [LumenCluster(825, 285), LumenCluster(1055, FLOOR_Y)]
         else:
-            platforms = [Platform(220, 440, 240), Platform(820, 440, 240), Platform(510, 315, 260)]
-            spikes = [SpikeHazard(300, FLOOR_Y, 680)]
-            deposits = [GeoDeposit(640, 315)]
+            platforms = [Platform(210, 435, 240), Platform(830, 435, 240), Platform(510, 310, 260)]
+            hazards = [CrystalHazard(300, FLOOR_Y, 680)]
+            clusters = [LumenCluster(640, 310)]
 
-        pool = ["wanderer", "aspid", "shield_knight", "spore", "stalker"]
+        pool = ["sentinel", "prism_drone", "aegis_warden", "nova_orb", "rift_assassin"]
         count = min(6, 3 + depth // 2)
         for i in range(count):
             kind = random.choice(pool)
             ex = 480 + i * 135 + random.randint(-30, 30)
-            ey = 210 if kind in ("aspid", "spore") else (FLOOR_Y - 76)
+            ey = 210 if kind in ("prism_drone", "nova_orb") else (FLOOR_Y - 78)
             enemies.append(Enemy(kind, min(WIDTH - 130, ex), ey, depth))
+        return "combat", platforms, hazards, clusters, enemies, None
 
-        return "combat", platforms, spikes, deposits, enemies, None
-
-    # Чертог Босса (room_idx == 3)
     boss_kind = Boss.TYPES[(depth - 1) % len(Boss.TYPES)][0]
-    if boss_kind == "radiance":
-        platforms = [
-            Platform(160, 475, 210),
-            Platform(535, 420, 210),
-            Platform(910, 475, 210),
-            Platform(340, 310, 180),
-            Platform(760, 310, 180),
-        ]
+    if boss_kind == "solaris":
+        platforms = [Platform(160, 465, 210), Platform(535, 410, 210), Platform(910, 465, 210), Platform(340, 300, 180), Platform(760, 300, 180)]
     else:
-        platforms = [Platform(210, 455, 180), Platform(890, 455, 180)]
-    return "boss", platforms, spikes, deposits, enemies, None
+        platforms = [Platform(200, 450, 190), Platform(890, 450, 190)]
+    return "boss", platforms, hazards, clusters, enemies, None
 
 
-# --- ОТРИСОВКА ФОНА, СКАМЬИ, HUD И МЕНЮ ---
-def draw_environment(surf, biome, ox, oy, room_type, bench_rect, gate_open):
-    surf.fill(biome["bg"])
-    for px in (150, 440, 840, 1130):
-        col_r = pygame.Rect(int(px - 28 + ox * 0.35), 0, 56, FLOOR_Y)
-        pygame.draw.rect(surf, biome["pillar"], col_r)
-        pygame.draw.line(surf, biome["pillar_edge"], (col_r.left, 0), (col_r.left, FLOOR_Y), 2)
+# --- ОТРИСОВКА МНОГОСЛОЙНОГО МИРА И ЗЕРКАЛЬНОГО ПОЛА ---
+def draw_backdrop(surf, sky_surf, biome, ox, oy, obelisk_rect, gate_open):
+    surf.blit(sky_surf, (0, 0))
+    t = pygame.time.get_ticks() * 0.001
 
-    floor_r = pygame.Rect(int(-20 + ox), int(FLOOR_Y + oy), WIDTH + 40, HEIGHT - FLOOR_Y + 30)
-    pygame.draw.rect(surf, biome["floor"], floor_r)
-    pygame.draw.line(surf, biome["floor_line"], (0, int(FLOOR_Y + oy)), (WIDTH, int(FLOOR_Y + oy)), 3)
+    # Небесное светило / Астролябия / Затмение на заднем плане
+    cx, cy = int(WIDTH * 0.5 + ox * 0.15), int(235 + oy * 0.15)
+    blit_glow(surf, cx, cy, 240, biome["accent_soft"], 75)
+    if biome["weather"] == "eclipse":
+        pygame.draw.circle(surf, (255, 225, 130), (cx, cy), 84)
+        pygame.draw.circle(surf, (12, 10, 20), (cx, cy), 76)
+    else:
+        pygame.draw.circle(surf, biome["arch_rim"], (cx, cy), 125, 2)
+        pygame.draw.circle(surf, biome["arch_rim"], (cx, cy), 85, 1)
+        for i in range(6):
+            ang = t * 0.35 + i * (math.pi / 3)
+            px = cx + int(math.cos(ang) * 125)
+            py = cy + int(math.sin(ang) * 125)
+            pygame.draw.circle(surf, biome["accent"], (px, py), 4)
 
-    # Скамья Древних в Святилище
-    if bench_rect:
-        br = bench_rect.move(int(ox), int(oy))
-        # Тёплый фонарь над скамьёй
-        pygame.draw.line(surf, (90, 105, 135), (br.centerx, br.top - 95), (br.centerx, br.top), 3)
-        pygame.draw.circle(surf, (255, 235, 175), (br.centerx, br.top - 95), 11)
-        pygame.draw.circle(surf, (255, 245, 210), (br.centerx, br.top - 95), 5)
-        # Сама скамья
-        pygame.draw.rect(surf, (135, 150, 180), (br.left, br.top + 12, br.width, 10), border_radius=3)
-        pygame.draw.rect(surf, (105, 120, 150), (br.left + 8, br.top, br.width - 16, 8), border_radius=3)
-        pygame.draw.rect(surf, (95, 110, 140), (br.left + 12, br.top + 12, 10, 26))
-        pygame.draw.rect(surf, (95, 110, 140), (br.right - 22, br.top + 12, 10, 26))
+    # Дальний слой силуэтов гор/руин (параллакс 0.25)
+    for i in range(-1, 7):
+        bx = int(i * 230 + ox * 0.25)
+        pts = [(bx, FLOOR_Y), (bx + 90, 320 + (i % 3) * 45), (bx + 180, 370), (bx + 250, FLOOR_Y)]
+        pygame.draw.polygon(surf, biome["arch"], pts)
 
-    # Правые врата перехода в следующую комнату
-    gate_x = WIDTH - 44 + int(ox)
-    gate_top = FLOOR_Y - 165 + int(oy)
+    # Ближние готические арки и колонны (параллакс 0.45)
+    for px in (150, 450, 830, 1130):
+        rx = int(px - 26 + ox * 0.45)
+        pygame.draw.rect(surf, biome["arch"], (rx, 0, 52, FLOOR_Y))
+        pygame.draw.line(surf, biome["arch_rim"], (rx, 0), (rx, FLOOR_Y), 2)
+        pygame.draw.line(surf, biome["arch_rim"], (rx + 52, 0), (rx + 52, FLOOR_Y), 1)
+
+    # Обелиск Гармонии в Святилище
+    if obelisk_rect:
+        or_r = obelisk_rect.move(int(ox), int(oy))
+        blit_glow(surf, or_r.centerx, or_r.centery - 15, 95, biome["accent"], 90)
+        pts = [(or_r.centerx, or_r.top), (or_r.right, or_r.top + 32), (or_r.right - 8, or_r.bottom), (or_r.left + 8, or_r.bottom), (or_r.left, or_r.top + 32)]
+        pygame.draw.polygon(surf, (24, 32, 52), pts)
+        pygame.draw.polygon(surf, biome["accent"], pts, 3)
+        float_y = or_r.top + 54 + int(math.sin(t * 3.5) * 6)
+        pygame.draw.polygon(surf, (255, 255, 255), [(or_r.centerx, float_y - 12), (or_r.centerx + 9, float_y), (or_r.centerx, float_y + 12), (or_r.centerx - 9, float_y)])
+
+    # Правый портал перехода
+    gx = WIDTH - 42 + int(ox)
+    gtop = FLOOR_Y - 170 + int(oy)
     if gate_open:
-        pygame.draw.rect(surf, biome["floor_line"], (gate_x, gate_top, 14, 165), border_radius=5)
-        pygame.draw.rect(surf, (240, 250, 255), (gate_x + 4, gate_top + 12, 6, 141), border_radius=3)
+        blit_glow(surf, gx + 6, gtop + 85, 70, biome["accent"], 95)
+        pygame.draw.rect(surf, biome["accent"], (gx, gtop, 12, 170), border_radius=5)
+        pygame.draw.rect(surf, (255, 255, 255), (gx + 4, gtop + 14, 4, 142), border_radius=2)
     else:
-        pygame.draw.rect(surf, (185, 55, 85), (gate_x, gate_top, 14, 165), border_radius=5)
+        pygame.draw.rect(surf, (215, 65, 95), (gx, gtop, 12, 170), border_radius=5)
 
 
-def draw_hud(surf, player, boss, depth, room_idx, biome_name):
-    f_title = get_font(22, bold=True)
-    f_small = get_font(17)
-    f_tiny = get_font(15)
+def draw_reflective_floor(surf, floor_surf, entity_layer, biome, ox, oy):
+    fy = int(FLOOR_Y + oy)
+    surf.blit(floor_surf, (int(-30 + ox), fy))
 
-    # Сосуд Души
-    sc = (58, 56)
-    pygame.draw.circle(surf, (22, 26, 40), sc, 34)
-    ratio = player.soul / player.max_soul
+    # Зеркальное отражение всего боевого слоя на полу!
+    ref_h = min(HEIGHT - fy, 130)
+    if ref_h > 10:
+        crop = entity_layer.subsurface((0, max(0, FLOOR_Y - ref_h), WIDTH, ref_h))
+        flipped = pygame.transform.flip(crop, False, True)
+        flipped.set_alpha(58)
+        surf.blit(flipped, (int(ox), fy + 2))
+
+    # Светящаяся кромка воды/обсидиана
+    pygame.draw.line(surf, biome["accent"], (0, fy), (WIDTH, fy), 3)
+    pygame.draw.line(surf, (255, 255, 255), (0, fy), (WIDTH, fy), 1)
+
+
+# --- ИНТЕРФЕЙС (HUD) И МЕНЮ РЕЛИКВИЙ ---
+def draw_hud(surf, hero, boss, depth, room_idx, biome):
+    f_title = get_font(21, bold=True)
+    f_small = get_font(16)
+    f_tiny = get_font(14)
+
+    # Сфера Эфира
+    sc = (56, 54)
+    blit_glow(surf, sc[0], sc[1], 46, (85, 225, 245), 65)
+    pygame.draw.circle(surf, (18, 24, 40), sc, 33)
+    ratio = hero.aether / hero.max_aether
     if ratio > 0:
-        pygame.draw.circle(surf, (215, 242, 255), sc, int(30 * math.sqrt(ratio)))
-    pygame.draw.circle(surf, (165, 190, 225), sc, 34, 3)
+        pygame.draw.circle(surf, (105, 235, 255), sc, int(29 * math.sqrt(ratio)))
+        pygame.draw.circle(surf, (235, 252, 255), sc, int(16 * math.sqrt(ratio)))
+    pygame.draw.circle(surf, (175, 210, 245), sc, 33, 3)
 
-    # Маски здоровья
-    for i in range(player.max_hp):
-        mx = 112 + i * 33
-        my = 34
-        mr = pygame.Rect(mx, my, 23, 28)
-        if i < player.hp:
-            col = (110, 190, 255) if i >= player.base_max_hp else (244, 248, 255)
-            pygame.draw.rect(surf, col, mr, border_radius=8)
-            pygame.draw.circle(surf, (14, 18, 28), (mx + 8, my + 13), 2)
-            pygame.draw.circle(surf, (14, 18, 28), (mx + 15, my + 13), 2)
+    # Ячейки прочности (Ромбы HP)
+    for i in range(hero.max_hp):
+        mx = 114 + i * 32
+        my = 38
+        pts = [(mx, my - 13), (mx + 11, my), (mx, my + 13), (mx - 11, my)]
+        if i < hero.hp:
+            col = (255, 215, 115) if i >= hero.base_max_hp else (115, 235, 255)
+            pygame.draw.polygon(surf, col, pts)
+            pygame.draw.polygon(surf, (255, 255, 255), pts, 2)
         else:
-            pygame.draw.rect(surf, (45, 52, 72), mr, 2, border_radius=8)
+            pygame.draw.polygon(surf, (45, 56, 82), pts, 2)
 
-    # Счётчик Гео под масками
-    pygame.draw.polygon(surf, (230, 245, 255), [(120, 78), (127, 86), (120, 94), (113, 86)])
-    geo_txt = f_title.render(f"{player.geo}", True, (240, 246, 255))
-    surf.blit(geo_txt, (136, 73))
+    # Счётчик Люмена и Индикатор Резонанса
+    pygame.draw.polygon(surf, (215, 250, 255), [(114, 68), (121, 76), (114, 84), (107, 76)])
+    surf.blit(f_title.render(f"{hero.lumen}", True, (240, 248, 255)), (130, 63))
 
-    # Локация и прогресс этажа справа сверху
+    tier_names = ["ПОТОК x1.0", "ПОТОК x1.15", "ПОТОК x1.3", "OVERDRIVE x1.5"]
+    tier_cols = [(145, 165, 195), (105, 235, 255), (185, 140, 255), (255, 215, 105)]
+    t_idx = hero.resonance_tier
+    res_bar_x, res_bar_y, res_bar_w = 225, 71, 160
+    pygame.draw.rect(surf, (22, 28, 44), (res_bar_x, res_bar_y, res_bar_w, 10), border_radius=5)
+    pygame.draw.rect(surf, tier_cols[t_idx], (res_bar_x, res_bar_y, int(res_bar_w * (hero.resonance / 100.0)), 10), border_radius=5)
+    surf.blit(f_small.render(f"{tier_names[t_idx]} ({hero.combo_count} уд.)", True, tier_cols[t_idx]), (res_bar_x + res_bar_w + 12, 65))
+
+    # Информация о биоме справа сверху
     stage_names = ["Святилище", "Зал I", "Зал II", "Чертог Босса"]
-    loc_txt = f_small.render(f"Глубина {depth}: {biome_name}  •  {stage_names[room_idx]}", True, (195, 210, 238))
-    surf.blit(loc_txt, (WIDTH - loc_txt.get_width() - 28, 28))
+    loc_txt = f_small.render(f"Этаж {depth}: {biome['name']}  |  {stage_names[room_idx]}", True, (205, 222, 248))
+    surf.blit(loc_txt, (WIDTH - loc_txt.get_width() - 26, 24))
 
-    help_txt = f_tiny.render("ЛКМ/J: Удар (W/S+Удар)  |  ПКМ/Shift: Рывок  |  Q/СКМ: Заклинание (W/S+Q)  |  E: Лечение  |  TAB: Билд", True, (130, 145, 175))
-    surf.blit(help_txt, (WIDTH - help_txt.get_width() - 28, 54))
+    ctrl_txt = f_tiny.render("ЛКМ/J: Комбо (S+Удар: отскок)  |  ПКМ/Shift: Рывок  |  СКМ/Q: Парирование  |  E: Искусство  |  F: Лечение  |  TAB: Реликвии", True, (135, 155, 185))
+    surf.blit(ctrl_txt, (WIDTH - ctrl_txt.get_width() - 26, 48))
 
     # Полоска HP босса
     if boss and boss.hp > 0:
-        bw, bh = 740, 18
+        bw, bh = 740, 16
         bx = (WIDTH - bw) // 2
-        by = HEIGHT - 50
-        t = f_title.render(boss.name, True, (242, 245, 255))
+        by = HEIGHT - 46
+        t = f_title.render(boss.name, True, (245, 248, 255))
         surf.blit(t, ((WIDTH - t.get_width()) // 2, by - 30))
-        pygame.draw.rect(surf, (22, 22, 34), (bx, by, bw, bh), border_radius=6)
+        pygame.draw.rect(surf, (18, 20, 32), (bx, by, bw, bh), border_radius=6)
         hw = int(bw * (boss.hp / boss.max_hp))
         if hw > 0:
             pygame.draw.rect(surf, boss.primary, (bx, by, hw, bh), border_radius=6)
-        pygame.draw.rect(surf, (165, 175, 205), (bx, by, bw, bh), 2, border_radius=6)
+        pygame.draw.rect(surf, (175, 190, 220), (bx, by, bw, bh), 2, border_radius=6)
 
 
-def draw_bench_menu(surf, player, tab_idx, selected_idx, at_bench):
-    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-    overlay.fill((8, 10, 18, 215))
-    surf.blit(overlay, (0, 0))
+def draw_shrine_menu(surf, hero, tab_idx, selected_idx, at_obelisk):
+    ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    ov.fill((6, 9, 18, 218))
+    surf.blit(ov, (0, 0))
 
-    panel = pygame.Rect(140, 75, WIDTH - 280, HEIGHT - 150)
-    pygame.draw.rect(surf, (18, 22, 34), panel, border_radius=16)
-    pygame.draw.rect(surf, (110, 135, 180), panel, 2, border_radius=16)
+    panel = pygame.Rect(140, 72, WIDTH - 280, HEIGHT - 144)
+    pygame.draw.rect(surf, (15, 20, 34), panel, border_radius=16)
+    pygame.draw.rect(surf, (95, 215, 245), panel, 2, border_radius=16)
 
-    f_head = get_font(28, bold=True)
-    f_med = get_font(20, bold=True)
-    f_reg = get_font(18)
+    f_head = get_font(26, bold=True)
+    f_med = get_font(19, bold=True)
+    f_reg = get_font(17)
 
-    mode_str = "СКАМЬЯ ДРЕВНИХ (Можно менять амулеты и покупать улучшения)" if at_bench else "ОБЗОР СНАРЯЖЕНИЯ (Сядь на скамью в Святилище, чтобы менять билд)"
-    h_txt = f_head.render(mode_str, True, (240, 245, 255))
-    surf.blit(h_txt, (panel.left + 32, panel.top + 22))
+    title_str = "ОБЕЛИСК ГАРМОНИИ (Настройка Реликвий и Улучшений)" if at_obelisk else "ОБЗОР РЕЛИКВИЙ (Подойди к Обелиску в Святилище, чтобы менять билд)"
+    surf.blit(f_head.render(title_str, True, (242, 248, 255)), (panel.left + 30, panel.top + 20))
 
-    # Вкладки
-    tabs = ["[1] Амулеты", "[2] Кузница и Улучшения"]
+    tabs = ["[1] Реликвии Синергии", "[2] Ковка и Характеристики"]
     for i, tname in enumerate(tabs):
-        tx = panel.left + 32 + i * 240
-        ty = panel.top + 68
-        col = (120, 225, 255) if i == tab_idx else (130, 145, 175)
-        surf.blit(f_med.render(tname, True, col), (tx, ty))
+        col = (105, 235, 255) if i == tab_idx else (130, 145, 175)
+        surf.blit(f_med.render(tname, True, col), (panel.left + 30 + i * 260, panel.top + 66))
 
-    # Индикатор Ячеек и Гео
-    notch_info = f_med.render(f"Ячейки: {player.used_notches()}/{player.max_notches}   |   Гео: {player.geo}", True, (255, 225, 120))
-    surf.blit(notch_info, (panel.right - notch_info.get_width() - 32, panel.top + 68))
-
-    pygame.draw.line(surf, (55, 68, 98), (panel.left + 24, panel.top + 104), (panel.right - 24, panel.top + 104), 2)
+    info = f_med.render(f"Ячейки: {hero.used_slots()}/{hero.max_slots}   |   Люмен: {hero.lumen}", True, (255, 220, 115))
+    surf.blit(info, (panel.right - info.get_width() - 30, panel.top + 66))
+    pygame.draw.line(surf, (48, 64, 96), (panel.left + 24, panel.top + 102), (panel.right - 24, panel.top + 102), 2)
 
     if tab_idx == 0:
-        # Сетка амулетов (2 колонки по 6)
-        for idx, ch in enumerate(CHARMS):
+        for idx, rel in enumerate(RELICS):
             col_i = idx % 2
             row_i = idx // 2
-            bx = panel.left + 34 + col_i * 465
-            by = panel.top + 122 + row_i * 58
-            box = pygame.Rect(bx, by, 445, 48)
+            bx = panel.left + 32 + col_i * 468
+            by = panel.top + 120 + row_i * 58
+            box = pygame.Rect(bx, by, 448, 48)
 
             is_sel = idx == selected_idx
-            is_eq = ch["id"] in player.equipped
-            bg_col = (34, 44, 68) if is_sel else (24, 29, 44)
-            border_col = (130, 230, 255) if is_sel else ((110, 220, 145) if is_eq else (52, 62, 86))
+            is_eq = rel["id"] in hero.equipped
+            bg_col = (30, 44, 70) if is_sel else (21, 28, 44)
+            border_col = (110, 235, 255) if is_sel else ((115, 240, 175) if is_eq else (48, 60, 86))
             pygame.draw.rect(surf, bg_col, box, border_radius=9)
             pygame.draw.rect(surf, border_col, box, 2, border_radius=9)
 
-            pygame.draw.circle(surf, ch["color"] if ch["unlocked"] else (70, 75, 90), (bx + 24, by + 24), 12)
-            status = "[НАДЕТО]" if is_eq else (f"{ch['notches']} яч." if ch["unlocked"] else f"Открыть: {ch['cost']} Гео")
-            name_col = (245, 248, 255) if ch["unlocked"] else (150, 160, 180)
-            surf.blit(f_med.render(ch["name"], True, name_col), (bx + 46, by + 11))
-            st_img = f_reg.render(status, True, (130, 240, 175) if is_eq else (235, 205, 120))
+            c_col = rel["color"] if rel["unlocked"] else (68, 76, 94)
+            pygame.draw.polygon(surf, c_col, [(bx + 24, by + 12), (bx + 35, by + 24), (bx + 24, by + 36), (bx + 13, by + 24)])
+            status = "[АКТИВНА]" if is_eq else (f"{rel['slots']} яч." if rel["unlocked"] else f"Открыть: {rel['cost']} Люм.")
+            surf.blit(f_med.render(rel["name"], True, (245, 248, 255) if rel["unlocked"] else (150, 160, 180)), (bx + 46, by + 11))
+            st_img = f_reg.render(status, True, (125, 245, 180) if is_eq else (255, 215, 115))
             surf.blit(st_img, (box.right - st_img.get_width() - 14, by + 13))
 
-        cur = CHARMS[selected_idx % len(CHARMS)]
-        desc_r = pygame.Rect(panel.left + 34, panel.bottom - 88, panel.width - 68, 42)
-        pygame.draw.rect(surf, (24, 30, 46), desc_r, border_radius=8)
-        surf.blit(f_reg.render(f"{cur['name']} ({cur['notches']} яч.): {cur['desc']}", True, (220, 235, 255)), (desc_r.left + 16, desc_r.top + 10))
-
+        cur = RELICS[selected_idx % len(RELICS)]
+        desc_r = pygame.Rect(panel.left + 32, panel.bottom - 88, panel.width - 64, 42)
+        pygame.draw.rect(surf, (22, 30, 48), desc_r, border_radius=8)
+        surf.blit(f_reg.render(f"{cur['name']} ({cur['slots']} яч.): {cur['desc']}", True, (215, 238, 255)), (desc_r.left + 16, desc_r.top + 10))
     else:
-        # Кузница и улучшения
         upgrades = [
-            ("Заточка Гвоздя (+4 к базовому урону)", 110 + (player.base_damage - 15) * 20, f"Текущий урон: {player.nail_damage}"),
-            ("Осколок Древней Маски (+1 макс. здоровье)", 140 + (player.base_max_hp - 6) * 65, f"Макс. масок: {player.max_hp}"),
-            ("Ячейка Амулетов (+1 слот для амулетов)", 130 + (player.max_notches - 4) * 55, f"Всего ячеек: {player.max_notches}/12"),
-            ("Сосуд Души (+25 к запасу Души)", 120 + int((player.max_soul - 100) * 2), f"Макс. Души: {int(player.max_soul)}"),
+            ("Закалка Астрального Клинка (+4 к базовому урону)", 110 + (hero.base_damage - 16) * 20, f"Базовый урон: {hero.base_damage}"),
+            ("Кристалл Прочности (+1 ячейка здоровья)", 140 + (hero.base_max_hp - 6) * 65, f"Макс. прочность: {hero.max_hp}"),
+            ("Слот Резонанса (+1 ячейка для реликвий)", 130 + (hero.max_slots - 4) * 55, f"Всего ячеек: {hero.max_slots}/12"),
+            ("Сосуд Эфира (+25 к запасу энергии)", 120 + int((hero.max_aether - 100) * 2), f"Макс. Эфир: {int(hero.max_aether)}"),
         ]
         for idx, (title, cost, cur_val) in enumerate(upgrades):
             by = panel.top + 135 + idx * 78
             box = pygame.Rect(panel.left + 38, by, panel.width - 76, 62)
             is_sel = idx == (selected_idx % len(upgrades))
-            pygame.draw.rect(surf, (34, 44, 68) if is_sel else (24, 29, 44), box, border_radius=10)
-            pygame.draw.rect(surf, (130, 230, 255) if is_sel else (55, 66, 92), box, 2, border_radius=10)
-            surf.blit(f_med.render(title, True, (242, 246, 255)), (box.left + 20, box.top + 10))
-            surf.blit(f_reg.render(cur_val, True, (165, 190, 225)), (box.left + 20, box.top + 35))
-            c_img = f_med.render(f"Купить: {cost} Гео", True, (255, 220, 115))
+            pygame.draw.rect(surf, (30, 44, 70) if is_sel else (21, 28, 44), box, border_radius=10)
+            pygame.draw.rect(surf, (110, 235, 255) if is_sel else (50, 64, 92), box, 2, border_radius=10)
+            surf.blit(f_med.render(title, True, (242, 248, 255)), (box.left + 20, box.top + 10))
+            surf.blit(f_reg.render(cur_val, True, (155, 200, 235)), (box.left + 20, box.top + 35))
+            c_img = f_med.render(f"Улучшить: {cost} Люмена", True, (255, 220, 115))
             surf.blit(c_img, (box.right - c_img.get_width() - 22, box.top + 18))
 
-    foot = f_reg.render("Стрелки / WASD: Выбор   |   Enter / Пробел: Надеть или Купить   |   ESC / TAB: Закрыть меню", True, (165, 185, 215))
+    foot = f_reg.render("WASD / Стрелки: Выбор   |   Enter / Пробел: Активировать или Купить   |   ESC / TAB: Закрыть", True, (165, 190, 220))
     surf.blit(foot, ((WIDTH - foot.get_width()) // 2, panel.bottom - 34))
 
 
-# --- ОСНОВНОЙ ИГРОВОЙ ЦИКЛ ---
+# --- ОСНОВНОЙ ЦИКЛ ---
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Void Knight: Abyssal Odyssey")
+    pygame.display.set_caption("AETHERFALL: RESONANCE")
     clock = pygame.time.Clock()
+    entity_layer = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 
-    f_big = get_font(56, bold=True)
-    f_med = get_font(26, bold=True)
-    f_prompt = get_font(20, bold=True)
+    f_big = get_font(58, bold=True)
+    f_med = get_font(24, bold=True)
+    f_prompt = get_font(19, bold=True)
 
     fullscreen = False
-    game_state = "title"  # title | playing | bench_menu | game_over
+    game_state = "title"
 
-    def reset_game():
-        for c in CHARMS:
-            c["unlocked"] = c["cost"] == 0
-        p = Player()
-        p.recalculate_stats()
-        rtype, plats, spks, deps, enms, b_rect = build_room(1, 0)
-        return p, 1, 0, rtype, plats, spks, deps, enms, b_rect, None, [], [], [], [], [], [], []
+    def init_run():
+        for r in RELICS:
+            r["unlocked"] = r["cost"] == 0
+        h = Hero()
+        h.recalculate_stats()
+        rtype, plats, hazs, clsts, enms, ob_rect = build_room(1, 0)
+        b = BIOMES[0]
+        motes = [WeatherMote(b) for _ in range(38)]
+        return h, 1, 0, rtype, plats, hazs, clsts, enms, ob_rect, None, build_sky_surface(b), build_floor_surface(b), motes
 
-    (
-        player,
-        depth,
-        room_idx,
-        room_type,
-        platforms,
-        spikes,
-        deposits,
-        enemies,
-        bench_rect,
-        boss,
-        particles,
-        afterimages,
-        floating_texts,
-        geo_shards,
-        shockwaves,
-        projectiles,
-        lasers,
-    ) = reset_game()
-    spells = []
+    hero, depth, room_idx, room_type, platforms, hazards, clusters, enemies, obelisk_rect, boss, sky_surf, floor_surf, motes = init_run()
+
+    particles, afterimages, slash_arcs, floating_texts = [], [], [], []
+    lumen_crystals, shockwaves, projectiles, lasers, arts = [], [], [], [], []
 
     hitstop = 0.0
     shake = 0.0
@@ -1738,23 +1865,31 @@ def main():
     banner_text = ""
     menu_tab = 0
     menu_sel = 0
-    at_bench = False
+    at_obelisk = False
 
     def enter_room(new_depth, new_room_idx):
-        nonlocal depth, room_idx, room_type, platforms, spikes, deposits, enemies, bench_rect, boss
-        nonlocal shockwaves, projectiles, lasers, spells, banner_timer, banner_text
+        nonlocal depth, room_idx, room_type, platforms, hazards, clusters, enemies, obelisk_rect, boss
+        nonlocal sky_surf, floor_surf, motes, banner_timer, banner_text
         depth = new_depth
         room_idx = new_room_idx
-        room_type, platforms, spikes, deposits, enemies, bench_rect = build_room(depth, room_idx)
+        biome = BIOMES[(depth - 1) % len(BIOMES)]
+        if room_idx == 0:
+            sky_surf = build_sky_surface(biome)
+            floor_surf = build_floor_surface(biome)
+            motes = [WeatherMote(biome) for _ in range(38)]
+
+        room_type, platforms, hazards, clusters, enemies, obelisk_rect = build_room(depth, room_idx)
         shockwaves.clear()
         projectiles.clear()
         lasers.clear()
-        spells.clear()
-        player.x = 85.0
-        player.y = float(FLOOR_Y - player.rect.height)
-        player.vx = 0.0
-        player.vy = 0.0
-        player.rect.topleft = (int(player.x), int(player.y))
+        arts.clear()
+        slash_arcs.clear()
+
+        hero.x = 85.0
+        hero.y = float(FLOOR_Y - hero.rect.height)
+        hero.vx = 0.0
+        hero.vy = 0.0
+        hero.rect.topleft = (int(hero.x), int(hero.y))
 
         if room_type == "boss":
             boss = Boss(depth)
@@ -1763,8 +1898,8 @@ def main():
         else:
             boss = None
             if room_idx == 0:
-                banner_text = f"ГЛУБИНА {depth} • {BIOMES[(depth - 1) % len(BIOMES)]['name']}"
-                banner_timer = 1.8
+                banner_text = f"ЭТАЖ {depth}  |  {biome['name']}"
+                banner_timer = 1.9
 
     while True:
         dt = min(0.04, clock.tick(FPS) / 1000.0)
@@ -1784,34 +1919,24 @@ def main():
                 if game_state == "title":
                     if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                         game_state = "playing"
-                        banner_text = f"ГЛУБИНА 1 • {biome['name']}"
+                        banner_text = f"ЭТАЖ 1  |  {biome['name']}"
                         banner_timer = 2.0
 
                 elif game_state == "game_over":
                     if event.key == pygame.K_r:
-                        (
-                            player,
-                            depth,
-                            room_idx,
-                            room_type,
-                            platforms,
-                            spikes,
-                            deposits,
-                            enemies,
-                            bench_rect,
-                            boss,
-                            particles,
-                            afterimages,
-                            floating_texts,
-                            geo_shards,
-                            shockwaves,
-                            projectiles,
-                            lasers,
-                        ) = reset_game()
-                        spells.clear()
+                        hero, depth, room_idx, room_type, platforms, hazards, clusters, enemies, obelisk_rect, boss, sky_surf, floor_surf, motes = init_run()
+                        particles.clear()
+                        afterimages.clear()
+                        slash_arcs.clear()
+                        floating_texts.clear()
+                        lumen_crystals.clear()
+                        shockwaves.clear()
+                        projectiles.clear()
+                        lasers.clear()
+                        arts.clear()
                         game_state = "playing"
 
-                elif game_state == "bench_menu":
+                elif game_state == "shrine_menu":
                     if event.key in (pygame.K_ESCAPE, pygame.K_TAB):
                         game_state = "playing"
                     elif event.key == pygame.K_1:
@@ -1822,416 +1947,506 @@ def main():
                         menu_sel = 0
                     elif event.key in (pygame.K_UP, pygame.K_w):
                         step = 2 if menu_tab == 0 else 1
-                        menu_sel = (menu_sel - step) % (len(CHARMS) if menu_tab == 0 else 4)
+                        menu_sel = (menu_sel - step) % (len(RELICS) if menu_tab == 0 else 4)
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
                         step = 2 if menu_tab == 0 else 1
-                        menu_sel = (menu_sel + step) % (len(CHARMS) if menu_tab == 0 else 4)
+                        menu_sel = (menu_sel + step) % (len(RELICS) if menu_tab == 0 else 4)
                     elif event.key in (pygame.K_LEFT, pygame.K_a) and menu_tab == 0:
-                        menu_sel = (menu_sel - 1) % len(CHARMS)
+                        menu_sel = (menu_sel - 1) % len(RELICS)
                     elif event.key in (pygame.K_RIGHT, pygame.K_d) and menu_tab == 0:
-                        menu_sel = (menu_sel + 1) % len(CHARMS)
-                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and at_bench:
+                        menu_sel = (menu_sel + 1) % len(RELICS)
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and at_obelisk:
                         if menu_tab == 0:
-                            ch = CHARMS[menu_sel]
-                            if not ch["unlocked"]:
-                                if player.geo >= ch["cost"]:
-                                    player.geo -= ch["cost"]
-                                    ch["unlocked"] = True
+                            rel = RELICS[menu_sel]
+                            if not rel["unlocked"]:
+                                if hero.lumen >= rel["cost"]:
+                                    hero.lumen -= rel["cost"]
+                                    rel["unlocked"] = True
                             else:
-                                if ch["id"] in player.equipped:
-                                    player.equipped.remove(ch["id"])
-                                elif player.used_notches() + ch["notches"] <= player.max_notches:
-                                    player.equipped.append(ch["id"])
-                                player.recalculate_stats()
-                                player.hp = player.max_hp
+                                if rel["id"] in hero.equipped:
+                                    hero.equipped.remove(rel["id"])
+                                elif hero.used_slots() + rel["slots"] <= hero.max_slots:
+                                    hero.equipped.append(rel["id"])
+                                hero.recalculate_stats()
+                                hero.hp = hero.max_hp
                         else:
                             idx = menu_sel % 4
                             if idx == 0:
-                                cost = 110 + (player.base_damage - 15) * 20
-                                if player.geo >= cost:
-                                    player.geo -= cost
-                                    player.base_damage += 4
+                                cost = 110 + (hero.base_damage - 16) * 20
+                                if hero.lumen >= cost:
+                                    hero.lumen -= cost
+                                    hero.base_damage += 4
                             elif idx == 1:
-                                cost = 140 + (player.base_max_hp - 6) * 65
-                                if player.geo >= cost and player.base_max_hp < 12:
-                                    player.geo -= cost
-                                    player.base_max_hp += 1
-                                    player.recalculate_stats()
-                                    player.hp = player.max_hp
+                                cost = 140 + (hero.base_max_hp - 6) * 65
+                                if hero.lumen >= cost and hero.base_max_hp < 12:
+                                    hero.lumen -= cost
+                                    hero.base_max_hp += 1
+                                    hero.recalculate_stats()
+                                    hero.hp = hero.max_hp
                             elif idx == 2:
-                                cost = 130 + (player.max_notches - 4) * 55
-                                if player.geo >= cost and player.max_notches < 12:
-                                    player.geo -= cost
-                                    player.max_notches += 1
+                                cost = 130 + (hero.max_slots - 4) * 55
+                                if hero.lumen >= cost and hero.max_slots < 12:
+                                    hero.lumen -= cost
+                                    hero.max_slots += 1
                             elif idx == 3:
-                                cost = 120 + int((player.max_soul - 100) * 2)
-                                if player.geo >= cost and player.max_soul < 200:
-                                    player.geo -= cost
-                                    player.max_soul += 25.0
-                                    player.soul = player.max_soul
+                                cost = 120 + int((hero.max_aether - 100) * 2)
+                                if hero.lumen >= cost and hero.max_aether < 200:
+                                    hero.lumen -= cost
+                                    hero.max_aether += 25.0
+                                    hero.aether = hero.max_aether
 
                 elif game_state == "playing":
                     if event.key == pygame.K_TAB:
-                        at_bench = False
-                        game_state = "bench_menu"
+                        at_obelisk = False
+                        game_state = "shrine_menu"
 
-                    # Взаимодействие со Скамьёй в Святилище
-                    if room_type == "sanctuary" and bench_rect and player.rect.colliderect(bench_rect.inflate(40, 20)):
+                    if room_type == "sanctuary" and obelisk_rect and hero.rect.colliderect(obelisk_rect.inflate(46, 20)):
                         if event.key in (pygame.K_w, pygame.K_e):
-                            player.hp = player.max_hp
-                            player.soul = player.max_soul
-                            at_bench = True
-                            game_state = "bench_menu"
+                            hero.hp = hero.max_hp
+                            hero.aether = hero.max_aether
+                            at_obelisk = True
+                            game_state = "shrine_menu"
                             continue
 
-                    # Спрыгнуть вниз с платформы: S + Space
-                    if event.key == pygame.K_SPACE and (keys[pygame.K_s] or keys[pygame.K_DOWN]) and player.on_ground and player.y + player.rect.height < FLOOR_Y - 5:
-                        player.drop_through_timer = 0.22
-                        player.on_ground = False
+                    if event.key == pygame.K_SPACE and (keys[pygame.K_s] or keys[pygame.K_DOWN]) and hero.on_ground and hero.y + hero.rect.height < FLOOR_Y - 5:
+                        hero.drop_through_timer = 0.22
+                        hero.on_ground = False
                     elif event.key in (pygame.K_SPACE, pygame.K_w, pygame.K_UP):
-                        if player.jumps_left > 0 and player.dash_timer <= 0 and not player.dive_active:
-                            player.vy = -805.0
-                            player.jumps_left -= 1
-                            player.on_ground = False
-                            player.jump_held = True
-                            for _ in range(9):
-                                particles.append(Particle(player.rect.centerx + random.uniform(-12, 12), player.rect.bottom, random.uniform(-110, 110), random.uniform(20, 110), (210, 235, 255), 5, 0.28))
+                        if hero.jumps_left > 0 and hero.dash_timer <= 0 and not hero.dive_active:
+                            hero.vy = -810.0
+                            hero.jumps_left -= 1
+                            hero.on_ground = False
+                            hero.jump_held = True
+                            for _ in range(10):
+                                particles.append(Particle(hero.rect.centerx + random.uniform(-12, 12), hero.rect.bottom, random.uniform(-110, 110), random.uniform(20, 110), (145, 235, 255), 5, 0.3, glow=True))
 
                     elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT, pygame.K_k):
-                        if player.start_dash():
+                        if hero.start_dash():
                             shake = max(shake, 4.0)
 
                     elif event.key == pygame.K_j:
-                        player.start_slash(keys)
+                        hero.start_slash(keys, slash_arcs, projectiles)
 
                     elif event.key in (pygame.K_q, pygame.K_c):
-                        if player.cast_spell(keys, spells, particles):
+                        hero.start_parry()
+
+                    elif event.key == pygame.K_e:
+                        if hero.cast_art(keys, arts, particles):
                             shake = max(shake, 7.0)
 
             if event.type == pygame.KEYUP:
                 if event.key in (pygame.K_SPACE, pygame.K_w, pygame.K_UP):
-                    player.jump_held = False
+                    hero.jump_held = False
 
             if event.type == pygame.MOUSEBUTTONDOWN and game_state == "playing":
                 if event.button == 1:
-                    player.start_slash(keys)
+                    hero.start_slash(keys, slash_arcs, projectiles)
                 elif event.button == 3:
-                    if player.start_dash():
+                    if hero.start_dash():
                         shake = max(shake, 4.0)
                 elif event.button == 2:
-                    if player.cast_spell(keys, spells, particles):
-                        shake = max(shake, 7.0)
+                    hero.start_parry()
 
-        # --- ОБНОВЛЕНИЕ ЛОГИКИ ИГРЫ ---
+        # --- ОБНОВЛЕНИЕ ЛОГИКИ ---
         if game_state == "playing":
             banner_timer = max(0.0, banner_timer - dt)
-            if random.random() < 0.35:
-                particles.append(Particle(random.randint(40, WIDTH - 40), random.randint(40, FLOOR_Y - 20), random.uniform(-18, 18), random.uniform(-25, -8), biome["dust"], 3, 2.2))
+            for m in motes:
+                m.update(dt)
 
             if hitstop > 0:
                 hitstop -= dt
             else:
-                player.update(dt, keys, platforms, particles, afterimages, spells, shockwaves)
+                hero.update(dt, keys, platforms, particles, afterimages, arts, shockwaves, slash_arcs)
 
-                for d in deposits:
-                    d.update(dt)
+                # Обработка отложенного Эхо-Клинка
+                if hero.pending_echo:
+                    delay, e_rect, e_dir = hero.pending_echo
+                    delay -= dt
+                    if delay <= 0:
+                        hero.pending_echo = None
+                        slash_arcs.append(SlashArc(e_rect, e_dir, (195, 145, 255), is_echo=True))
+                        edmg = max(4, int(hero.blade_damage * 0.55))
+                        for en in enemies:
+                            if e_rect.colliderect(en.rect):
+                                en.hp -= edmg
+                                en.flash = 0.06
+                                floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 8, edmg, (205, 160, 255), 17))
+                        if boss and boss.hp > 0 and e_rect.colliderect(boss.rect):
+                            boss.take_damage(edmg)
+                            floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 12, edmg, (205, 160, 255), 18))
+                    else:
+                        hero.pending_echo = (delay, e_rect, e_dir)
+
+                for cl in clusters:
+                    cl.update(dt)
                 for en in enemies:
-                    en.update(dt, player, projectiles, particles)
+                    en.update(dt, hero, projectiles)
                 if boss and boss.hp > 0:
-                    boss.update(dt, player, projectiles, shockwaves, lasers, enemies, particles)
+                    boss.update(dt, hero, projectiles, shockwaves, lasers, particles)
 
                 for sw in shockwaves:
                     sw.update(dt)
                 for pr in projectiles:
-                    pr.update(dt, player)
+                    target = boss if (pr.friendly and boss and boss.hp > 0) else (enemies[0] if (pr.friendly and enemies) else hero)
+                    pr.update(dt, target)
                 for lz in lasers:
                     lz.update(dt)
-                for sp in spells:
-                    sp.update(dt)
-                for gs in geo_shards:
-                    gs.update(dt, player, magnet=player.has_charm("swarm"))
+                for ar in arts:
+                    ar.update(dt)
+                for lc in lumen_crystals:
+                    lc.update(dt, hero, magnet=hero.has_relic("lumen_magnet"))
                 for pt in particles:
                     pt.update(dt)
                 for ai in afterimages:
                     ai.update(dt)
+                for sa in slash_arcs:
+                    sa.update(dt)
                 for ft in floating_texts:
                     ft.update(dt)
 
                 shockwaves = [s for s in shockwaves if s.life > 0]
-                projectiles = [p for p in projectiles if p.life > 0 and 0 <= p.x <= WIDTH and p.y <= FLOOR_Y + 20]
+                projectiles = [p for p in projectiles if p.life > 0 and -50 <= p.x <= WIDTH + 50 and p.y <= FLOOR_Y + 25]
                 lasers = [l for l in lasers if l.timer > 0]
-                spells = [s for s in spells if s.life > 0 and -200 <= s.x <= WIDTH + 200]
+                arts = [a for a in arts if a.life > 0 and -250 <= a.x <= WIDTH + 250]
                 particles = [p for p in particles if p.life > 0]
                 afterimages = [a for a in afterimages if a.life > 0]
+                slash_arcs = [s for s in slash_arcs if s.life > 0]
                 floating_texts = [f for f in floating_texts if f.life > 0]
 
-                # Сбор Гео
-                for gs in list(geo_shards):
-                    if gs.life <= 0:
-                        geo_shards.remove(gs)
-                    elif player.rect.colliderect(gs.rect.inflate(14, 14)):
-                        bonus = int(round(gs.value * (1.25 if player.has_charm("swarm") else 1.0)))
-                        player.geo += bonus
-                        geo_shards.remove(gs)
+                # Сбор Люмена
+                for lc in list(lumen_crystals):
+                    if lc.life <= 0:
+                        lumen_crystals.remove(lc)
+                    elif hero.rect.colliderect(lc.rect.inflate(14, 14)):
+                        bonus = int(round(lc.value * (1.3 if hero.has_relic("lumen_magnet") else 1.0)))
+                        hero.lumen += bonus
+                        lumen_crystals.remove(lc)
 
-                # Урон от клинка игрока
-                s_rect = player.get_slash_rect()
-                soul_gain = 16.0 if player.has_charm("soul_catcher") else 11.0
-                pogo_vy = -810.0 if player.has_charm("mark_of_pride") else -740.0
+                # Попадания клинка
+                s_rect = hero.get_slash_rect()
+                aether_gain = 16.0 if hero.has_relic("crystal_reaper") else 11.5
+                vault_vy = -805.0
 
                 if s_rect:
-                    # Пого-отскок от шипов!
-                    if player.slash_dir == "down":
-                        for spk in spikes:
-                            if s_rect.colliderect(spk.rect):
-                                player.vy = pogo_vy
-                                player.reset_air_mobility()
+                    # Отскок от кристальных шипов
+                    if hero.slash_dir == "down":
+                        for hz in hazards:
+                            if s_rect.colliderect(hz.rect):
+                                hero.vy = vault_vy
+                                hero.reset_air_mobility()
                                 for _ in range(8):
-                                    particles.append(Particle(player.rect.centerx, spk.rect.top, random.uniform(-160, 160), random.uniform(-220, -40), (220, 240, 255), 4, 0.25))
+                                    particles.append(Particle(hero.rect.centerx, hz.rect.top, random.uniform(-160, 160), random.uniform(-220, -40), biome["accent"], 4, 0.25, glow=True))
                                 break
 
-                    # Жилы Гео
-                    for dep in deposits:
-                        if dep.hp > 0 and s_rect.colliderect(dep.rect) and id(dep) not in player.hit_ids:
-                            player.hit_ids.add(id(dep))
-                            dep.hp -= 1
-                            dep.flash = 0.08
+                    # Кристальные друзы
+                    for cl in clusters:
+                        if cl.hp > 0 and s_rect.colliderect(cl.rect) and id(cl) not in hero.hit_ids:
+                            hero.hit_ids.add(id(cl))
+                            cl.hp -= 1
+                            cl.flash = 0.08
                             shake = max(shake, 5.0)
-                            for _ in range(4 if dep.hp > 0 else 10):
-                                geo_shards.append(GeoShard(dep.rect.centerx, dep.rect.centery, 6))
+                            for _ in range(4 if cl.hp > 0 else 10):
+                                lumen_crystals.append(LumenCrystal(cl.rect.centerx, cl.rect.centery, 6))
 
-                    # Обычные враги
+                    # Враги
                     for en in list(enemies):
-                        if s_rect.colliderect(en.rect) and id(en) not in player.hit_ids:
-                            player.hit_ids.add(id(en))
-                            # Проверка щита у Рыцаря со щитом
+                        if s_rect.colliderect(en.rect) and id(en) not in hero.hit_ids:
+                            hero.hit_ids.add(id(en))
                             blocked = (
-                                en.kind == "shield_knight"
-                                and player.slash_dir in ("left", "right")
-                                and ((en.facing == -1 and player.rect.centerx < en.rect.centerx) or (en.facing == 1 and player.rect.centerx > en.rect.centerx))
+                                en.kind == "aegis_warden"
+                                and hero.slash_dir in ("left", "right")
+                                and ((en.facing == -1 and hero.rect.centerx < en.rect.centerx) or (en.facing == 1 and hero.rect.centerx > en.rect.centerx))
                             )
                             if blocked:
-                                player.vx = -player.facing * 320.0
-                                floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, "БЛОК!", (180, 210, 255), 18))
-                                for _ in range(10):
-                                    particles.append(Particle(en.rect.centerx, en.rect.centery, random.uniform(-220, 220), random.uniform(-220, 220), (200, 230, 255), 5, 0.25))
+                                hero.vx = -hero.facing * 320.0
+                                floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, "ЩИТ!", (140, 225, 255), 18))
                             else:
-                                dmg = player.nail_damage
+                                dmg = hero.blade_damage
                                 en.hp -= dmg
                                 en.flash = 0.08
-                                player.soul = min(player.max_soul, player.soul + soul_gain)
-                                hitstop = 0.028
+                                hero.aether = min(hero.max_aether, hero.aether + aether_gain)
+                                hero.add_resonance(12.0)
+                                hero.combo_count += 1
+                                hitstop = 0.026
                                 shake = max(shake, 6.0)
                                 floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, dmg, (255, 255, 255), 20))
-                                if player.slash_dir == "down":
-                                    player.vy = pogo_vy
-                                    player.reset_air_mobility()
+                                if hero.slash_dir == "down":
+                                    hero.vy = vault_vy
+                                    hero.reset_air_mobility()
+                                    if hero.has_relic("astral_vortex"):
+                                        arts.append(AstralArtBlast(hero.rect.centerx - 90, hero.rect.centery - 90, 180, 180, 0, 0, int(dmg * 0.8), 0.18, "nova"))
                                 else:
-                                    en.vx += player.facing * 260.0
+                                    en.vx += hero.facing * 260.0
 
                     # Босс
-                    if boss and boss.hp > 0 and s_rect.colliderect(boss.rect) and id(boss) not in player.hit_ids:
-                        player.hit_ids.add(id(boss))
-                        dmg = player.nail_damage
+                    if boss and boss.hp > 0 and s_rect.colliderect(boss.rect) and id(boss) not in hero.hit_ids:
+                        hero.hit_ids.add(id(boss))
+                        dmg = hero.blade_damage
                         boss.take_damage(dmg)
-                        player.soul = min(player.max_soul, player.soul + soul_gain)
-                        hitstop = 0.036
+                        hero.aether = min(hero.max_aether, hero.aether + aether_gain)
+                        hero.add_resonance(11.0)
+                        hero.combo_count += 1
+                        hitstop = 0.034
                         shake = max(shake, 8.0)
-                        floating_texts.append(FloatingText(boss.rect.centerx + random.randint(-20, 20), boss.rect.top - 14, dmg, (255, 245, 220), 23))
-                        if player.slash_dir == "down":
-                            player.vy = pogo_vy
-                            player.reset_air_mobility()
-                        elif player.slash_dir == "left":
-                            player.vx = 230.0
-                        elif player.slash_dir == "right":
-                            player.vx = -230.0
+                        floating_texts.append(FloatingText(boss.rect.centerx + random.randint(-20, 20), boss.rect.top - 14, dmg, (255, 240, 185), 23))
+                        if hero.slash_dir == "down":
+                            hero.vy = vault_vy
+                            hero.reset_air_mobility()
+                            if hero.has_relic("astral_vortex"):
+                                arts.append(AstralArtBlast(hero.rect.centerx - 95, hero.rect.centery - 95, 190, 190, 0, 0, int(dmg * 0.8), 0.18, "nova"))
+                        elif hero.slash_dir == "left":
+                            hero.vx = 220.0
+                        elif hero.slash_dir == "right":
+                            hero.vx = -220.0
 
-                # Урон от Пронизывающей Тени при рывке
-                if player.dash_timer > 0 and player.has_charm("sharp_shadow"):
-                    sdmg = int(player.nail_damage * 1.1)
+                # Урон от Искрового Шага при рывке
+                if hero.dash_timer > 0 and hero.has_relic("volt_step"):
+                    vdmg = int(hero.blade_damage * 1.15)
                     for en in enemies:
-                        if player.rect.colliderect(en.rect) and id(en) not in player.dash_hit_ids:
-                            player.dash_hit_ids.add(id(en))
-                            en.hp -= sdmg
+                        if hero.rect.colliderect(en.rect) and id(en) not in hero.dash_hit_ids:
+                            hero.dash_hit_ids.add(id(en))
+                            en.hp -= vdmg
                             en.flash = 0.08
-                            floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, sdmg, (185, 130, 255), 20))
-                    if boss and boss.hp > 0 and player.rect.colliderect(boss.rect) and id(boss) not in player.dash_hit_ids:
-                        player.dash_hit_ids.add(id(boss))
-                        boss.take_damage(sdmg)
-                        floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 14, sdmg, (185, 130, 255), 22))
+                            floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, vdmg, (120, 220, 255), 20))
+                    if boss and boss.hp > 0 and hero.rect.colliderect(boss.rect) and id(boss) not in hero.dash_hit_ids:
+                        hero.dash_hit_ids.add(id(boss))
+                        boss.take_damage(vdmg)
+                        floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 14, vdmg, (120, 220, 255), 22))
 
-                # Урон от заклинаний игрока
-                for sp in spells:
+                # Дружественные снаряды (Солнечный Серп, отражённые пули, Звёзды Парирования)
+                for pr in list(projectiles):
+                    if pr.friendly:
+                        for en in enemies:
+                            if pr.rect.colliderect(en.rect) and id(en) not in pr.hit_ids:
+                                pr.hit_ids.add(id(en))
+                                en.hp -= pr.damage
+                                en.flash = 0.08
+                                floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 10, pr.damage, (255, 220, 115), 20))
+                        if boss and boss.hp > 0 and pr.rect.colliderect(boss.rect) and id(boss) not in pr.hit_ids:
+                            pr.hit_ids.add(id(boss))
+                            boss.take_damage(pr.damage)
+                            floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 14, pr.damage, (255, 220, 115), 22))
+
+                # Астральные Искусства
+                for ar in arts:
                     for en in enemies:
-                        if sp.rect.colliderect(en.rect) and id(en) not in sp.hit_ids:
-                            sp.hit_ids.add(id(en))
-                            en.hp -= sp.damage
+                        if ar.rect.colliderect(en.rect) and id(en) not in ar.hit_ids:
+                            ar.hit_ids.add(id(en))
+                            en.hp -= ar.damage
                             en.flash = 0.1
                             shake = max(shake, 8.0)
-                            floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 12, f"{sp.damage}!", (150, 225, 255), 24))
-                    if boss and boss.hp > 0 and sp.rect.colliderect(boss.rect) and id(boss) not in sp.hit_ids:
-                        sp.hit_ids.add(id(boss))
-                        boss.take_damage(sp.damage)
+                            floating_texts.append(FloatingText(en.rect.centerx, en.rect.top - 12, f"{ar.damage}!", (115, 235, 255), 24))
+                    if boss and boss.hp > 0 and ar.rect.colliderect(boss.rect) and id(boss) not in ar.hit_ids:
+                        ar.hit_ids.add(id(boss))
+                        boss.take_damage(ar.damage)
                         hitstop = 0.04
                         shake = max(shake, 10.0)
-                        floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 18, f"{sp.damage}!", (150, 225, 255), 26))
+                        floating_texts.append(FloatingText(boss.rect.centerx, boss.rect.top - 18, f"{ar.damage}!", (115, 235, 255), 26))
 
-                # Смерть обычных врагов -> выпадение Гео
+                # Смерть обычных врагов
                 for en in list(enemies):
                     if en.hp <= 0:
                         enemies.remove(en)
-                        for _ in range(max(2, en.geo // 4)):
-                            geo_shards.append(GeoShard(en.rect.centerx, en.rect.centery, 4))
-                        for _ in range(18):
+                        if hero.has_relic("crystal_reaper") and hero.hp < hero.max_hp and random.random() < 0.35:
+                            hero.hp += 1
+                        for _ in range(max(2, en.lumen // 4)):
+                            lumen_crystals.append(LumenCrystal(en.rect.centerx, en.rect.centery, 4))
+                        for _ in range(20):
                             ang = random.uniform(0, math.tau)
-                            spd = random.uniform(90, 320)
-                            particles.append(Particle(en.rect.centerx, en.rect.centery, math.cos(ang) * spd, math.sin(ang) * spd, (215, 235, 255), 6, 0.4))
+                            spd = random.uniform(90, 340)
+                            particles.append(Particle(en.rect.centerx, en.rect.centery, math.cos(ang) * spd, math.sin(ang) * spd, biome["accent"], 6, 0.42, glow=True))
 
-                # Проверка получения урона игроком
-                intangible = player.dash_timer > 0 or player.invuln_timer > 0 or player.dive_active
+                # --- ПРОВЕРКА АСТРАЛЬНОГО ПАРИРОВАНИЯ И УРОНА ---
+                parry_zone = hero.rect.inflate(36, 36)
+                if hero.parry_timer > 0:
+                    parried_any = False
+                    for pr in projectiles:
+                        if not pr.friendly and parry_zone.colliderect(pr.rect):
+                            pr.friendly = True
+                            pr.vx = -pr.vx * 1.45
+                            pr.vy = -pr.vy * 1.45
+                            pr.color = (255, 230, 120)
+                            pr.damage = int(hero.blade_damage * 1.6)
+                            parried_any = True
+                    for en in enemies:
+                        if parry_zone.colliderect(en.rect):
+                            en.hp -= int(hero.blade_damage * 1.4)
+                            en.vx = -en.facing * 450.0
+                            parried_any = True
+                    if boss and boss.hp > 0 and parry_zone.colliderect(boss.rect):
+                        boss.take_damage(int(hero.blade_damage * 1.5))
+                        parried_any = True
+                    if parried_any:
+                        hero.parry_timer = 0.0
+                        hero.parry_cd = 0.15
+                        hero.invuln_timer = max(hero.invuln_timer, 0.45)
+                        hero.aether = min(hero.max_aether, hero.aether + 28.0)
+                        hero.add_resonance(25.0)
+                        hero.combo_count += 2
+                        hitstop = 0.065
+                        shake = 12.0
+                        floating_texts.append(FloatingText(hero.rect.centerx, hero.rect.top - 22, "ПАРИРОВАНИЕ!", (255, 235, 130), 22))
+                        for _ in range(26):
+                            ang = random.uniform(0, math.tau)
+                            particles.append(Particle(hero.rect.centerx, hero.rect.centery, math.cos(ang) * 380, math.sin(ang) * 380, (255, 235, 140), 6, 0.35, glow=True))
+                        if hero.has_relic("mirror_aegis"):
+                            for i in range(3):
+                                ang = -0.3 + i * 0.3 + (0 if hero.facing == 1 else math.pi)
+                                projectiles.append(Projectile(hero.rect.centerx, hero.rect.centery, math.cos(ang) * 460, math.sin(ang) * 460, 10, (255, 235, 140), homing=True, friendly=True, damage=hero.blade_damage))
+
+                intangible = hero.dash_timer > 0 or hero.invuln_timer > 0 or hero.dive_active or hero.parry_timer > 0
                 if not intangible:
                     hurt = False
-                    for spk in spikes:
-                        if player.rect.colliderect(spk.rect):
+                    for hz in hazards:
+                        if hero.rect.colliderect(hz.rect):
                             hurt = True
                     for en in enemies:
-                        if player.rect.colliderect(en.rect):
+                        if hero.rect.colliderect(en.rect):
                             hurt = True
-                    if boss and boss.hp > 0 and boss.state != "stagger" and player.rect.colliderect(boss.rect):
+                    if boss and boss.hp > 0 and boss.state != "stagger" and hero.rect.colliderect(boss.rect):
                         hurt = True
-                    if boss and boss.clone_rect and player.rect.colliderect(boss.clone_rect):
+                    if boss and boss.clone_rect and hero.rect.colliderect(boss.clone_rect):
                         hurt = True
                     for sw in shockwaves:
-                        if not sw.friendly and player.rect.colliderect(sw.rect):
+                        if not sw.friendly and hero.rect.colliderect(sw.rect):
                             hurt = True
                     for pr in projectiles:
-                        if player.rect.colliderect(pr.rect):
+                        if not pr.friendly and hero.rect.colliderect(pr.rect):
                             hurt = True
                     for lz in lasers:
-                        if lz.collides_rect(player.rect):
+                        if lz.collides_rect(hero.rect):
                             hurt = True
 
                     if hurt:
-                        player.hp -= 1
-                        player.invuln_timer = 1.2
-                        player.focus_timer = 0.0
+                        hero.hp -= 1
+                        hero.invuln_timer = 1.2
+                        hero.mend_timer = 0.0
+                        hero.resonance = max(0.0, hero.resonance - 35.0)
+                        hero.combo_count = 0
                         hitstop = 0.055
                         shake = 14.0
-                        player.vy = -440.0
-                        player.vx = -player.facing * 360.0
+                        hero.vy = -440.0
+                        hero.vx = -hero.facing * 360.0
 
-                        if player.has_charm("grubsong"):
-                            player.soul = min(player.max_soul, player.soul + 25.0)
-                        if player.has_charm("thorns"):
-                            thorn_r = player.rect.inflate(180, 180)
+                        if hero.has_relic("briar_halo"):
+                            hero.aether = min(hero.max_aether, hero.aether + 25.0)
+                            blast_r = hero.rect.inflate(190, 190)
                             for en in enemies:
-                                if thorn_r.colliderect(en.rect):
-                                    en.hp -= player.nail_damage * 2
-                            if boss and boss.hp > 0 and thorn_r.colliderect(boss.rect):
-                                boss.take_damage(player.nail_damage * 2)
+                                if blast_r.colliderect(en.rect):
+                                    en.hp -= hero.blade_damage * 2
+                            if boss and boss.hp > 0 and blast_r.colliderect(boss.rect):
+                                boss.take_damage(hero.blade_damage * 2)
                             for _ in range(30):
                                 ang = random.uniform(0, math.tau)
-                                particles.append(Particle(player.rect.centerx, player.rect.centery, math.cos(ang) * 420, math.sin(ang) * 420, (140, 230, 130), 7, 0.35))
+                                particles.append(Particle(hero.rect.centerx, hero.rect.centery, math.cos(ang) * 430, math.sin(ang) * 430, (255, 130, 95), 7, 0.35, glow=True))
 
-                        if player.hp <= 0:
+                        if hero.hp <= 0:
                             game_state = "game_over"
 
                 # Победа над боссом
                 if room_type == "boss" and boss and boss.hp <= 0:
                     shake = 18.0
-                    hitstop = 0.08
+                    hitstop = 0.085
                     banner_text = f"{boss.name} ПОВЕРЖЕН!"
                     banner_timer = 2.4
-                    for _ in range(28):
-                        geo_shards.append(GeoShard(boss.rect.centerx, boss.rect.centery, 8))
-                    for _ in range(65):
+                    for _ in range(30):
+                        lumen_crystals.append(LumenCrystal(boss.rect.centerx, boss.rect.centery, 8))
+                    for _ in range(70):
                         ang = random.uniform(0, math.tau)
-                        spd = random.uniform(140, 620)
-                        particles.append(Particle(boss.rect.centerx, boss.rect.centery, math.cos(ang) * spd, math.sin(ang) * spd, boss.glow, 9, 0.8))
+                        spd = random.uniform(140, 640)
+                        particles.append(Particle(boss.rect.centerx, boss.rect.centery, math.cos(ang) * spd, math.sin(ang) * spd, boss.glow, 9, 0.85, glow=True))
                     shockwaves.clear()
                     projectiles.clear()
                     lasers.clear()
                     boss = None
 
-                # Переход в следующую комнату через правые врата
+                # Переход в следующую комнату
                 gate_open = (room_type == "sanctuary") or (room_type == "combat" and len(enemies) == 0) or (room_type == "boss" and boss is None)
-                if gate_open and player.rect.right >= WIDTH - 44:
+                if gate_open and hero.rect.right >= WIDTH - 42:
                     if room_idx < 3:
                         enter_room(depth, room_idx + 1)
                     else:
                         enter_room(depth + 1, 0)
 
-        # --- ОТРИСОВКА ---
+        # --- ОТРИСОВКА КАДРА ---
         shake = max(0.0, shake - 44.0 * dt)
         ox = random.uniform(-shake, shake) if shake > 0 else 0.0
         oy = random.uniform(-shake, shake) if shake > 0 else 0.0
 
         gate_open = (room_type == "sanctuary") or (room_type == "combat" and len(enemies) == 0) or (room_type == "boss" and boss is None)
-        draw_environment(screen, biome, ox, oy, room_type, bench_rect, gate_open)
+        draw_backdrop(screen, sky_surf, biome, ox, oy, obelisk_rect, gate_open)
+        for m in motes:
+            m.draw(screen, ox, oy)
 
+        # Боевой слой (рендерится на экран И отражается в полу)
+        entity_layer.fill((0, 0, 0, 0))
         for plat in platforms:
-            plat.draw(screen, ox, oy, biome)
-        for spk in spikes:
-            spk.draw(screen, ox, oy)
-        for dep in deposits:
-            dep.draw(screen, ox, oy)
+            plat.draw(entity_layer, 0, 0, biome)
+        for hz in hazards:
+            hz.draw(entity_layer, 0, 0, biome)
+        for cl in clusters:
+            cl.draw(entity_layer, 0, 0)
         for ai in afterimages:
-            ai.draw(screen, ox, oy)
+            ai.draw(entity_layer, 0, 0)
         for sw in shockwaves:
-            sw.draw(screen, ox, oy)
+            sw.draw(entity_layer, 0, 0)
         for en in enemies:
-            en.draw(screen, ox, oy)
+            en.draw(entity_layer, 0, 0)
         if boss and boss.hp > 0:
-            boss.draw(screen, ox, oy)
-        player.draw(screen, ox, oy)
-        for sp in spells:
-            sp.draw(screen, ox, oy)
+            boss.draw(entity_layer, 0, 0)
+        hero.draw(entity_layer, 0, 0)
+        for sa in slash_arcs:
+            sa.draw(entity_layer, 0, 0)
+        for ar in arts:
+            ar.draw(entity_layer, 0, 0)
         for pr in projectiles:
-            pr.draw(screen, ox, oy)
+            pr.draw(entity_layer, 0, 0)
         for lz in lasers:
-            lz.draw(screen, ox, oy)
-        for gs in geo_shards:
-            gs.draw(screen, ox, oy)
+            lz.draw(entity_layer, 0, 0)
+        for lc in lumen_crystals:
+            lc.draw(entity_layer, 0, 0)
         for pt in particles:
-            pt.draw(screen, ox, oy)
+            pt.draw(entity_layer, 0, 0)
+
+        draw_reflective_floor(screen, floor_surf, entity_layer, biome, ox, oy)
+        screen.blit(entity_layer, (int(ox), int(oy)))
+
         for ft in floating_texts:
             ft.draw(screen, ox, oy)
 
-        # Подсказка у Скамьи
-        if game_state == "playing" and room_type == "sanctuary" and bench_rect and player.rect.colliderect(bench_rect.inflate(40, 20)):
-            p_img = f_prompt.render("[W / E] Сесть на Скамью (Лечение, Амулеты и Улучшения)", True, (255, 242, 185))
-            screen.blit(p_img, (bench_rect.centerx - p_img.get_width() // 2 + int(ox), bench_rect.top - 135 + int(oy)))
+        if game_state == "playing" and room_type == "sanctuary" and obelisk_rect and hero.rect.colliderect(obelisk_rect.inflate(46, 20)):
+            p_img = f_prompt.render("[W / E] Коснуться Обелиска Гармонии (Реликвии и Ковка)", True, (255, 240, 175))
+            screen.blit(p_img, (obelisk_rect.centerx - p_img.get_width() // 2 + int(ox), obelisk_rect.top - 42 + int(oy)))
 
-        draw_hud(screen, player, boss, depth, room_idx, biome["name"])
+        draw_hud(screen, hero, boss, depth, room_idx, biome)
 
-        # Баннер входа в биом или появления босса
         if banner_timer > 0 and game_state == "playing":
-            b_img = f_med.render(banner_text, True, (245, 248, 255))
+            b_img = f_med.render(banner_text, True, (245, 250, 255))
             bx = (WIDTH - b_img.get_width()) // 2
-            by = 135
-            pygame.draw.line(screen, biome["floor_line"], (bx - 40, by + 38), (bx + b_img.get_width() + 40, by + 38), 2)
+            by = 132
+            pygame.draw.line(screen, biome["accent"], (bx - 45, by + 36), (bx + b_img.get_width() + 45, by + 36), 2)
             screen.blit(b_img, (bx, by))
 
         if game_state == "title":
             ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            ov.fill((8, 10, 18, 195))
+            ov.fill((6, 9, 18, 190))
             screen.blit(ov, (0, 0))
-            t1 = f_big.render("VOID KNIGHT: ABYSSAL ODYSSEY", True, (245, 248, 255))
-            t2 = f_med.render("Нажми ENTER или ПРОБЕЛ, чтобы спуститься в Бездну", True, (150, 215, 255))
-            screen.blit(t1, ((WIDTH - t1.get_width()) // 2, HEIGHT // 2 - 55))
-            screen.blit(t2, ((WIDTH - t2.get_width()) // 2, HEIGHT // 2 + 20))
+            t1 = f_big.render("AETHERFALL: RESONANCE", True, (245, 250, 255))
+            t2 = f_med.render("Нажми ENTER или ПРОБЕЛ, чтобы шагнуть в Разлом", True, (110, 235, 255))
+            screen.blit(t1, ((WIDTH - t1.get_width()) // 2, HEIGHT // 2 - 58))
+            screen.blit(t2, ((WIDTH - t2.get_width()) // 2, HEIGHT // 2 + 18))
 
-        elif game_state == "bench_menu":
-            draw_bench_menu(screen, player, menu_tab, menu_sel, at_bench)
+        elif game_state == "shrine_menu":
+            draw_shrine_menu(screen, hero, menu_tab, menu_sel, at_obelisk)
 
         elif game_state == "game_over":
             ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            ov.fill((8, 10, 18, 200))
+            ov.fill((6, 9, 18, 200))
             screen.blit(ov, (0, 0))
-            t1 = f_big.render("ТЕНЬ РАССЕЯЛАСЬ", True, (245, 248, 255))
-            t2 = f_med.render(f"Достигнута Глубина: {depth}   |   Нажми R, чтобы начать новый забег", True, (185, 205, 235))
-            screen.blit(t1, ((WIDTH - t1.get_width()) // 2, HEIGHT // 2 - 50))
-            screen.blit(t2, ((WIDTH - t2.get_width()) // 2, HEIGHT // 2 + 20))
+            t1 = f_big.render("НИТЬ РЕЗОНАНСА ПРЕРВАНА", True, (245, 250, 255))
+            t2 = f_med.render(f"Пройдено этажей: {depth}   |   Нажми R, чтобы начать новый забег", True, (175, 215, 245))
+            screen.blit(t1, ((WIDTH - t1.get_width()) // 2, HEIGHT // 2 - 52))
+            screen.blit(t2, ((WIDTH - t2.get_width()) // 2, HEIGHT // 2 + 18))
 
         pygame.display.flip()
 
