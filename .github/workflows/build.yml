@@ -1,4 +1,4 @@
-name: Build Astral Knight EXE
+name: Build Astral Knight HD (180 FPS)
 
 on:
   push:
@@ -23,12 +23,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build EXE with PyInstaller
+      - name: Download Custom Font
         run: |
-          pyinstaller --onefile --noconsole --name "AstralKnight" main.py
+          mkdir assets\fonts -Force
+          curl -L -f --retry 3 "https://github.com/google/fonts/raw/main/ofl/exo2/Exo2%5Bwght%5D.ttf" -o assets\fonts\AstralFont.ttf || echo "Fallback to system font"
 
-      - name: Upload EXE Artifact
+      - name: Generate 2K Textures, HD Sprites & Stereo Audio
+        run: |
+          python build_assets.py
+
+      - name: Build Windows App with PyInstaller
+        run: |
+          pyinstaller --onedir --noconsole --noupx --name "AstralKnight" --add-data "assets;assets" main.py
+
+      - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AstralKnight-Windows
-          path: dist/AstralKnight.exe
+          name: AstralKnight-HD-Windows
+          path: dist/AstralKnight
