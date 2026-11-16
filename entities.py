@@ -75,8 +75,9 @@ class LumenCrystal:
             spd = 840.0 if magnet else 530.0
             self.vx += (dx / dist) * spd * 6.0 * dt
             self.vy += (dy / dist) * spd * 6.0 * dt
-            self.vx *= 0.91
-            self.vy *= 0.91
+            damp = math.exp(-5.5 * dt)
+            self.vx *= damp
+            self.vy *= damp
         else:
             self.vy = min(960.0, self.vy + GRAVITY * 0.85 * dt)
 
@@ -91,7 +92,7 @@ class LumenCrystal:
         if self.y >= FLOOR_Y - 8:
             self.y = float(FLOOR_Y - 8)
             self.vy *= -0.45
-            self.vx *= 0.78
+            self.vx *= math.exp(-12.0 * dt)
 
     def draw(self, surf, bloom, ox, oy):
         cx, cy = int(self.x + ox), int(self.y + oy)
@@ -280,13 +281,15 @@ class Hero:
 
         self.max_slots = 4
         self.equipped = ["echo_edge", "mirror_aegis"]
-        self.blessings = []  # IDs выбранных даров забега
+        self.blessings = []
         self.immortal_used = False
         self.parry_heal_cd = 0.0
 
         self.resonance = 0.0
+        self.was_overdrive = False
         self.combo_count = 0
         self.walk_anim = 0.0
+        self.emit_timer = 0.0
 
         self.on_ground = False
         self.jumps_left = 2
@@ -326,19 +329,14 @@ class Hero:
         return bid in self.blessings
 
     def active_synergies(self):
-        res = []
-        for syn in SYNERGIES:
-            if syn["req"][0] in self.equipped and syn["req"][1] in self.equipped:
-                res.append(syn["id"])
-        return res
+        return [s["id"] for s in SYNERGIES if s["req"][0] in self.equipped and s["req"][1] in self.equipped]
 
     def used_slots(self):
         by_id = {r["id"]: r["slots"] for r in RELICS}
         return sum(by_id.get(rid, 0) for rid in self.equipped)
 
     def recalculate_stats(self):
-        bonus = 2 if self.has_relic("titan_heart") else 0
-        bonus += self.blessings.count("b_hp")
+        bonus = (2 if self.has_relic("titan_heart") else 0) + self.blessings.count("b_hp")
         self.max_hp = self.base_max_hp + bonus
         self.hp = min(self.hp, self.max_hp)
 
@@ -361,19 +359,20 @@ class Hero:
 
     @property
     def art_mult(self):
-        m = 1.45 if self.has_relic("prism_lens") else 1.0
-        m += 0.25 * self.blessings.count("b_art")
-        return m
+        return (1.45 if self.has_relic("prism_lens") else 1.0) + 0.25 * self.blessings.count("b_art")
 
-    def add_resonance(self, amount):
+    def add_resonance(self, amount, sfx):
         mult = 1.5 if self.has_relic("harmonic_core") else 1.0
         self.resonance = min(100.0, self.resonance + amount * mult * (self.weapon["flow_gain"] / 12.0))
+        if self.resonance_tier == 3 and not self.was_overdrive:
+            self.was_overdrive = True
+            sfx.play("overdrive")
 
     def reset_air_mobility(self):
         self.jumps_left = 3 if self.has_relic("celestial_wing") else 2
         self.dash_cd = min(self.dash_cd, 0.04)
 
-    def start_dash(self):
+    def start_dash(self, sfx):
         if self.dash_cd <= 0 and self.dash_timer <= 0 and not self.dive_active:
             self.dash_timer = 0.19
             base_cd = 0.36 if self.has_relic("gale_tempo") else 0.50
@@ -384,28 +383,31 @@ class Hero:
             self.dash_hit_ids.clear()
             self.vy = 0.0
             self.mend_timer = 0.0
+            sfx.play("dash")
             if "tempest_dance" in self.active_synergies() and not self.on_ground:
                 self.slash_cd = 0.0
             return True
         return False
 
-    def start_parry(self):
+    def start_parry(self, sfx):
         if self.parry_cd <= 0 and self.parry_timer <= 0 and not self.dive_active:
             self.parry_timer = 0.34 if self.has_relic("chrono_thread") else 0.24
             self.parry_cd = 0.60
             self.mend_timer = 0.0
+            sfx.play("parry_activate")
             return True
         return False
 
-    def start_slash(self, keys, projectiles):
+    def start_slash(self, keys, projectiles, sfx):
         if self.slash_cd <= 0 and self.dash_timer <= 0 and not self.dive_active:
             self.slash_max_time = 0.15
             self.slash_timer = self.slash_max_time
-            cd = self.weapon["cd"] * (0.72 if self.has_relic("gale_tempo") else 1.0)
-            self.slash_cd = cd
+            self.slash_cd = self.weapon["cd"] * (0.72 if self.has_relic("gale_tempo") else 1.0)
             self.slash_step = (self.slash_step + 1) % 4
             self.hit_ids.clear()
             self.mend_timer = 0.0
+
+            sfx.play(f"slash_{self.weapon_id}")
 
             if keys[pygame.K_w] or keys[pygame.K_UP]:
                 self.slash_dir = "up"
@@ -426,7 +428,7 @@ class Hero:
             return True
         return False
 
-    def cast_art(self, keys, arts, sparks):
+    def cast_art(self, keys, arts, sparks, sfx):
         cost = 26.0 if self.has_blessing("b_art") else 33.0
         if self.aether < cost or self.dash_timer > 0 or self.dive_active:
             return False
@@ -437,6 +439,7 @@ class Hero:
         if keys[pygame.K_w] or keys[pygame.K_UP]:
             rad = int(265 * scale)
             arts.append(AstralArtBlast(self.rect.centerx - rad // 2, self.rect.centery - rad // 2, rad, rad, 0, 0, int(44 * self.art_mult), 0.26, "nova"))
+            sfx.play("art_nova")
             for _ in range(28):
                 ang = random.uniform(0, math.tau)
                 spd = random.uniform(180, 480)
@@ -448,12 +451,14 @@ class Hero:
             self.vx = 0.0
             self.vy = 1520.0
             self.invuln_timer = max(self.invuln_timer, 0.7)
+            sfx.play("art_meteor_dive")
             return True
 
         w, h = int(130 * scale), int(48 * scale)
         sx = self.rect.right if self.facing == 1 else self.rect.left - w
         arts.append(AstralArtBlast(sx, self.rect.centery - h // 2, w, h, self.facing * 1040.0, 0.0, int(36 * self.art_mult), 1.1, "lance"))
         self.vx = -self.facing * 150.0
+        sfx.play("art_lance")
         return True
 
     def get_slash_rect(self):
@@ -473,7 +478,7 @@ class Hero:
             return pygame.Rect(cx - broad // 2, self.rect.bottom - 6, broad, length)
         return None
 
-    def update(self, dt, keys, platforms, sparks, rings, arts, shockwaves):
+    def update(self, dt, keys, platforms, sparks, rings, arts, shockwaves, sfx):
         self.dash_cd = max(0.0, self.dash_cd - dt)
         self.slash_cd = max(0.0, self.slash_cd - dt)
         self.slash_timer = max(0.0, self.slash_timer - dt)
@@ -482,10 +487,13 @@ class Hero:
         self.parry_heal_cd = max(0.0, self.parry_heal_cd - dt)
         self.invuln_timer = max(0.0, self.invuln_timer - dt)
         self.drop_through_timer = max(0.0, self.drop_through_timer - dt)
+        self.emit_timer = max(0.0, self.emit_timer - dt)
 
         decay = 4.0 if self.has_relic("harmonic_core") else 6.5
         floor_res = 30.0 if self.has_blessing("b_flow") else 0.0
         self.resonance = max(floor_res, self.resonance - decay * dt)
+        if self.resonance_tier < 3:
+            self.was_overdrive = False
         if self.resonance == 0:
             self.combo_count = 0
 
@@ -498,14 +506,13 @@ class Hero:
         if move_dir != 0 and self.dash_timer <= 0 and not self.dive_active:
             self.facing = move_dir
             if self.on_ground:
-                self.walk_anim += dt * 12.0
+                self.walk_anim += dt * 15.0
         else:
             self.walk_anim = 0.0
 
-        # Обновление ленты меча (Ribbon Trail) во время взмаха
         if self.slash_timer > 0:
             prog = 1.0 - (self.slash_timer / self.slash_max_time)
-            ang_span = (-1.1 + prog * 2.2)
+            ang_span = -1.1 + prog * 2.2
             reach = self.weapon["reach"]
             cx, cy = self.rect.center
             if self.slash_dir == "right":
@@ -519,23 +526,24 @@ class Hero:
             tip = (cx + math.cos(ang) * reach, cy + math.sin(ang) * reach)
             base = (cx + math.cos(ang) * 24, cy + math.sin(ang) * 24)
             col = (255, 220, 105) if self.resonance_tier == 3 else self.weapon["color"]
-            self.trail.add(tip, base, col)
+            self.trail.add(tip, base, col, dt)
         self.trail.update(dt)
 
-        # Гармоническое Восстановление (F)
         if keys[pygame.K_f] and self.on_ground and move_dir == 0 and self.dash_timer <= 0 and not self.dive_active and self.hp < self.max_hp and self.aether >= 33.0:
             self.mend_timer += dt
-            if random.random() < 0.65:
+            if self.emit_timer <= 0:
+                self.emit_timer = 0.025
+                sfx.play("heal_tick", vol_mult=0.6, cooldown=0.16)
                 sparks.append(SparkParticle(self.rect.centerx + random.uniform(-26, 26), self.rect.bottom - random.uniform(0, 46), random.uniform(-20, 20), random.uniform(-180, -70), (130, 245, 255), 0.35, 0))
             if self.mend_timer >= 0.72:
                 self.mend_timer = 0.0
                 self.aether -= 33.0
                 self.hp = min(self.max_hp, self.hp + 1)
+                sfx.play("heal_complete")
                 rings.append(RingWave(self.rect.centerx, self.rect.centery, 95, (140, 245, 255), 0.35, 4))
         else:
             self.mend_timer = 0.0
 
-        # Движение
         if self.dive_active:
             self.vx = 0.0
             self.vy = 1520.0
@@ -543,7 +551,8 @@ class Hero:
             self.dash_timer -= dt
             self.vx = self.dash_dir * 1060.0
             self.vy = 0.0
-            if random.random() < 0.7:
+            if self.emit_timer <= 0:
+                self.emit_timer = 0.015
                 sparks.append(SparkParticle(self.rect.centerx, self.rect.centery + random.uniform(-20, 20), -self.dash_dir * random.uniform(120, 280), random.uniform(-40, 40), self.weapon["color"], 0.25, 0))
         else:
             spd_mult = (1.12 if self.resonance_tier >= 2 else 1.0) * (1.18 if self.has_blessing("b_speed") else 1.0)
@@ -587,6 +596,7 @@ class Hero:
             if self.dive_active:
                 self.dive_active = False
                 self.invuln_timer = max(self.invuln_timer, 0.35)
+                sfx.play("art_meteor_impact")
                 dmg = int(54 * self.art_mult)
                 scale = 1.25 if self.has_relic("prism_lens") else 1.0
                 bw, bh = int(330 * scale), int(125 * scale)
@@ -597,6 +607,8 @@ class Hero:
                 shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, w_spd, height=62, life=0.75, color=(110, 235, 255), friendly=True, damage=int(28 * self.art_mult)))
 
         if landed:
+            if not self.on_ground:
+                sfx.play("land", vol_mult=0.55)
             self.on_ground = True
             self.jumps_left = 3 if self.has_relic("celestial_wing") else 2
         else:
@@ -605,17 +617,17 @@ class Hero:
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
 
-        # Шарф
         self.scarf[0] = [self.rect.centerx - self.facing * 5, self.rect.top + 26]
+        lerp_f = 1.0 - math.exp(-24.0 * dt)
         for i in range(1, len(self.scarf)):
             px, py = self.scarf[i - 1]
             cx, cy = self.scarf[i]
             tx = px - self.facing * 7
             ty = py + 4 + math.sin(pygame.time.get_ticks() * 0.012 + i) * 1.6
-            self.scarf[i][0] += (tx - cx) * min(1.0, 24.0 * dt)
-            self.scarf[i][1] += (ty - cy) * min(1.0, 24.0 * dt)
+            self.scarf[i][0] += (tx - cx) * lerp_f
+            self.scarf[i][1] += (ty - cy) * lerp_f
 
-    def draw(self, surf, bloom, sprite_bank, ox, oy):
+    def draw(self, surf, bloom, assets, ox, oy):
         self.trail.draw(surf, bloom, ox, oy)
         if self.invuln_timer > 0 and not self.dive_active and int(self.invuln_timer * 22) % 2 == 0:
             return
@@ -624,21 +636,18 @@ class Hero:
         w_col = (255, 215, 105) if self.resonance_tier == 3 else self.weapon["color"]
         bloom.add_glow(r.centerx, r.centery, 65 + self.resonance_tier * 12, w_col, 110 + self.resonance_tier * 20)
 
-        # Развевающийся шёлковый шарф
         pts = [(int(p[0] + ox), int(p[1] + oy)) for p in self.scarf]
         for i in range(len(pts) - 1):
             w = max(3, 13 - i)
             col = (255, 200, 95) if (self.resonance_tier == 3 and i > 4) else (55, 175, 220)
             pygame.draw.line(surf, col, pts[i], pts[i + 1], w)
 
-        # Спрайт героя
-        frame_idx = int(self.walk_anim) % 4 if self.on_ground else 1
-        spr = sprite_bank.hero_frames[frame_idx]
+        frame_idx = int(self.walk_anim) % 8 if self.on_ground else 2
+        spr = assets.hero_frames[frame_idx]
         if self.facing == -1:
             spr = pygame.transform.flip(spr, True, False)
         surf.blit(spr, (r.centerx - spr.get_width() // 2, r.bottom - spr.get_height()))
 
-        # Оружие в руке героя
         hx = r.centerx + self.facing * 12
         hy = r.centery + 4
         if self.weapon_id == "saber":
@@ -653,7 +662,6 @@ class Hero:
             pygame.draw.line(surf, (255, 235, 180), (hx, hy), tip, 7)
             pygame.draw.line(surf, w_col, (hx, hy), tip, 3)
 
-        # Щит Парирования
         if self.parry_timer > 0:
             bloom.add_glow(r.centerx, r.centery, 85, (255, 235, 140), 180)
             pygame.draw.circle(surf, (255, 245, 180), r.center, 46, 4)
@@ -688,7 +696,7 @@ class Enemy:
     def rect(self):
         return pygame.Rect(int(self.x), int(self.y), self.w, self.h)
 
-    def update(self, dt, hero, projectiles):
+    def update(self, dt, hero, projectiles, sfx):
         self.flash = max(0.0, self.flash - dt)
         self.timer -= dt
         dx = hero.rect.centerx - self.rect.centerx
@@ -706,6 +714,7 @@ class Enemy:
             self.vy = (desired_y - self.y) * 2.5
             if self.timer <= 0:
                 self.timer = 2.0
+                sfx.play("art_lance", vol_mult=0.45, cooldown=0.2)
                 base_ang = math.atan2(dy, dx)
                 for off in (-0.22, 0.0, 0.22):
                     ang = base_ang + off
@@ -734,6 +743,7 @@ class Enemy:
                 self.timer = 0.45
             if self.state == "arming" and self.timer <= 0:
                 self.hp = 0
+                sfx.play("art_meteor_impact", vol_mult=0.55)
                 for i in range(8):
                     ang = (math.tau / 8) * i
                     projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 340, math.sin(ang) * 340, 10, (255, 145, 80)))
@@ -749,6 +759,7 @@ class Enemy:
                 self.state = "dash"
                 self.timer = 0.24
                 self.vx = self.facing * 840.0
+                sfx.play("dash", vol_mult=0.5)
             elif self.state == "dash" and self.timer <= 0:
                 self.state = "idle"
                 self.timer = 1.05
@@ -770,9 +781,10 @@ class Enemy:
         else:
             self.y = max(95.0, min(float(FLOOR_Y - self.h - 20), self.y))
 
-    def draw(self, surf, bloom, sprite_bank, ox, oy):
+    def draw(self, surf, bloom, assets, ox, oy):
         r = self.rect.move(int(ox), int(oy))
-        spr = sprite_bank.enemy_sprites[self.kind]
+        f_idx = (pygame.time.get_ticks() // 220) % 2
+        spr = assets.enemy_frames[self.kind][f_idx]
         if self.facing == -1:
             spr = pygame.transform.flip(spr, True, False)
         surf.blit(spr, (r.centerx - spr.get_width() // 2, r.bottom - spr.get_height()))
@@ -801,6 +813,7 @@ class Boss:
         self.max_hp = int(300 + (depth - 1) * 125)
         self.hp = self.max_hp
         self.poise_hits = 0
+        self.phase2_roared = False
 
         self.state = "idle"
         self.timer = 1.0
@@ -826,10 +839,14 @@ class Boss:
                 self.timer = 1.45
                 self.vx = 0.0
 
-    def update(self, dt, hero, projectiles, shockwaves, lasers, sparks):
+    def update(self, dt, hero, projectiles, shockwaves, lasers, sparks, sfx):
         self.flash = max(0.0, self.flash - dt)
         self.timer -= dt
         spd_mult = (1.24 if self.phase2 else 1.0) + min(0.35, (self.depth - 1) * 0.04)
+
+        if self.phase2 and not self.phase2_roared:
+            self.phase2_roared = True
+            sfx.play("boss_roar")
 
         if self.clone_timer > 0:
             self.clone_timer -= dt
@@ -855,12 +872,14 @@ class Boss:
                 self.state = "slam_air"
                 self.vy = -1280.0
                 self.target_x = float(hero.rect.centerx - self.rect.width // 2)
+                sfx.play("jump", vol_mult=0.8)
             elif self.state == "slam_air":
                 self.vy += GRAVITY * 0.95 * dt
-                self.x += (self.target_x - self.x) * min(1.0, 6.2 * dt)
+                self.x += (self.target_x - self.x) * (1.0 - math.exp(-6.2 * dt))
                 if self.y + self.rect.height >= FLOOR_Y and self.vy > 0:
                     self.y = float(FLOOR_Y - self.rect.height)
                     self.vy = 0.0
+                    sfx.play("boss_slam")
                     wspd = 520.0 * spd_mult
                     shockwaves.append(Shockwave(self.rect.left, FLOOR_Y, -wspd, color=self.primary))
                     shockwaves.append(Shockwave(self.rect.right, FLOOR_Y, wspd, color=self.primary))
@@ -874,6 +893,7 @@ class Boss:
                     self.state = "charge"
                     self.timer = 0.36
                     self.vx = self.facing * 900.0 * spd_mult
+                    sfx.play("dash", vol_mult=0.9)
             elif self.state == "charge" and self.timer <= 0:
                 self.vx = 0.0
                 self.combo -= 1
@@ -884,6 +904,7 @@ class Boss:
                     self.state = "idle"
                     self.timer = 0.75 / spd_mult
             elif self.state == "eruption_prep" and self.timer <= 0:
+                sfx.play("boss_slam")
                 wspd = 600.0 * spd_mult
                 shockwaves.append(Shockwave(self.rect.centerx, FLOOR_Y, self.facing * wspd, height=86, color=self.primary))
                 if self.phase2:
@@ -909,24 +930,29 @@ class Boss:
                         self.state = "jump_up"
                         self.vy = -1150.0
                         self.vx = self.facing * 240.0
+                        sfx.play("double_jump", vol_mult=0.8)
                     else:
                         self.state = "nova_jump"
                         self.vy = -1050.0
+                        sfx.play("double_jump", vol_mult=0.8)
             elif self.state == "lunge_prep":
                 self.facing = 1 if hero.rect.centerx > self.rect.centerx else -1
                 if self.timer <= 0:
                     self.state = "lunge"
                     self.timer = 0.28
                     self.vx = self.facing * 1080.0 * spd_mult
+                    sfx.play("slash_saber", vol_mult=0.9)
             elif self.state == "lunge" and self.timer <= 0:
                 self.vx = 0.0
                 self.state = "idle"
                 self.timer = 0.65 / spd_mult
             elif self.state == "throw_prep" and self.timer <= 0:
                 if self.kind == "valkyrie":
+                    sfx.play("boss_laser")
                     for sx in range(160, WIDTH - 140, 210):
                         lasers.append(LaserBeam(sx, 20, math.pi / 2 + random.uniform(-0.15, 0.15), warn_time=0.65 / spd_mult, color=self.glow))
                 else:
+                    sfx.play("echo_slash")
                     projectiles.append(Projectile(self.rect.centerx, self.rect.centery, self.facing * 930.0, 0.0, 14, self.glow, boomerang=True, owner=self))
                 self.state = "idle"
                 self.timer = 1.05 / spd_mult
@@ -944,10 +970,12 @@ class Boss:
                 self.state = "diving"
                 self.vx = self.target_x
                 self.vy = self.target_y
+                sfx.play("art_meteor_dive")
             elif self.state == "diving" and self.y + self.rect.height >= FLOOR_Y:
                 self.y = float(FLOOR_Y - self.rect.height)
                 self.vx = 0.0
                 self.vy = 0.0
+                sfx.play("boss_slam")
                 self.state = "idle"
                 self.timer = 0.65 / spd_mult
             elif self.state == "nova_jump" and self.vy >= -60:
@@ -955,6 +983,7 @@ class Boss:
                 self.timer = 0.72
                 self.vx = 0.0
                 self.vy = 0.0
+                sfx.play("art_nova", vol_mult=0.8)
                 count = 10 if self.phase2 else 6
                 for i in range(count):
                     ang = (math.tau / count) * i
@@ -976,6 +1005,7 @@ class Boss:
                     if pick == "chrono_beam":
                         self.state = "laser_aim"
                         self.timer = 0.72 / spd_mult
+                        sfx.play("boss_laser")
                         ang = math.atan2(hero.rect.centery - self.rect.centery, hero.rect.centerx - self.rect.centerx)
                         lasers.append(LaserBeam(self.rect.centerx, self.rect.centery - 15, ang, warn_time=0.62 / spd_mult, color=self.glow))
                         if self.phase2:
@@ -984,9 +1014,11 @@ class Boss:
                     elif pick == "grid_lasers":
                         self.state = "laser_aim"
                         self.timer = 0.78 / spd_mult
+                        sfx.play("boss_laser")
                         for lx in (230, 510, 790, 1070):
                             lasers.append(LaserBeam(lx, 40, math.pi / 2, warn_time=0.68 / spd_mult, color=self.primary))
                     else:
+                        sfx.play("dash")
                         for _ in range(20):
                             sparks.append(SparkParticle(self.rect.centerx, self.rect.centery, random.uniform(-240, 240), random.uniform(-240, 240), self.glow, 0.4, 0))
                         self.x = float(random.choice([140, 590, 1020]))
@@ -1024,6 +1056,7 @@ class Boss:
                 self.state = "dashing"
                 self.timer = 0.3
                 self.vx = self.facing * 1090.0 * spd_mult
+                sfx.play("dash")
                 if self.clone_rect:
                     cdir = 1 if hero.rect.centerx > self.clone_rect.centerx else -1
                     projectiles.append(Projectile(self.clone_rect.centerx, self.clone_rect.centery, cdir * 630.0, 0, 14, self.glow))
@@ -1036,14 +1069,17 @@ class Boss:
                 if self.timer <= 0:
                     self.state = "dropping"
                     self.vy = 1400.0
+                    sfx.play("art_meteor_dive")
             elif self.state == "dropping" and self.y + self.rect.height >= FLOOR_Y:
                 self.y = float(FLOOR_Y - self.rect.height)
                 self.vy = 0.0
+                sfx.play("boss_slam")
                 shockwaves.append(Shockwave(self.rect.left, FLOOR_Y, -550.0, height=50, color=self.primary))
                 shockwaves.append(Shockwave(self.rect.right, FLOOR_Y, 550.0, height=50, color=self.primary))
                 self.state = "idle"
                 self.timer = 0.62 / spd_mult
             elif self.state == "blades_prep" and self.timer <= 0:
+                sfx.play("echo_slash")
                 for row_y in (FLOOR_Y - 34, FLOOR_Y - 115):
                     projectiles.append(Projectile(self.rect.centerx, row_y, self.facing * 570.0 * spd_mult, 0, 13, self.glow))
                 self.state = "idle"
@@ -1055,13 +1091,14 @@ class Boss:
         elif self.kind == "solaris":
             hover_x = 640 + math.sin(pygame.time.get_ticks() * 0.0014) * 320 - self.rect.width // 2
             hover_y = 180 + math.cos(pygame.time.get_ticks() * 0.0022) * 34
-            self.x += (hover_x - self.x) * min(1.0, 2.2 * dt)
-            self.y += (hover_y - self.y) * min(1.0, 2.5 * dt)
+            self.x += (hover_x - self.x) * (1.0 - math.exp(-2.2 * dt))
+            self.y += (hover_y - self.y) * (1.0 - math.exp(-2.5 * dt))
             self.vy = 0.0
 
             if self.state == "idle" and self.timer <= 0:
                 pick = random.choice(["corona_burst", "eclipse_wall", "star_seekers", "constellation"])
                 if pick == "corona_burst":
+                    sfx.play("art_nova", vol_mult=0.8)
                     count = 12 if self.phase2 else 8
                     base = random.uniform(0, 0.5)
                     for i in range(count):
@@ -1069,6 +1106,7 @@ class Boss:
                         projectiles.append(Projectile(self.rect.centerx, self.rect.centery, math.cos(ang) * 435, math.sin(ang) * 435, 12, self.glow))
                     self.timer = 1.15 / spd_mult
                 elif pick == "eclipse_wall":
+                    sfx.play("art_lance", vol_mult=0.7)
                     side = random.choice([-1, 1])
                     sx = 80 if side == 1 else WIDTH - 80
                     for py in range(150, FLOOR_Y, 85):
@@ -1076,10 +1114,12 @@ class Boss:
                             projectiles.append(Projectile(sx, py, side * 425 * spd_mult, 0, 14, self.primary))
                     self.timer = 1.35 / spd_mult
                 elif pick == "star_seekers":
+                    sfx.play("echo_slash")
                     for _ in range(3 if self.phase2 else 2):
                         projectiles.append(Projectile(self.rect.centerx + random.uniform(-120, 120), self.rect.centery, random.uniform(-180, 180), -120, 14, (255, 235, 145), homing=True))
                     self.timer = 1.4 / spd_mult
                 elif pick == "constellation":
+                    sfx.play("boss_laser")
                     count = 6 if self.phase2 else 4
                     base = random.uniform(0.2, 1.2)
                     for i in range(count):
@@ -1106,7 +1146,7 @@ class Boss:
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
 
-    def draw(self, surf, bloom, sprite_bank, ox, oy):
+    def draw(self, surf, bloom, assets, ox, oy):
         t = pygame.time.get_ticks() * 0.003
         if self.clone_rect:
             cr = self.clone_rect.move(int(ox), int(oy))
@@ -1117,7 +1157,6 @@ class Boss:
         r = self.rect.move(int(ox), int(oy))
         bloom.add_glow(r.centerx, r.centery, 125 if self.phase2 else 95, self.primary, 130)
 
-        # Вращающийся астрономический нимб за спиной босса
         ring_r = 74 if self.phase2 else 58
         pygame.draw.circle(surf, self.glow, r.center, ring_r, 2)
         for i in range(4):
@@ -1133,7 +1172,8 @@ class Boss:
                 pygame.draw.polygon(surf, self.primary, [(wx, r.centery - 10), (wx + side * 72, r.top - 22 + flap), (wx + side * 46, r.centery + 10)])
                 pygame.draw.polygon(surf, self.glow, [(wx, r.centery + 6), (wx + side * 56, r.centery + 24 - flap), (wx + side * 26, r.bottom)])
 
-        spr = sprite_bank.boss_sprites[self.kind]
+        f_idx = (pygame.time.get_ticks() // 160) % 4
+        spr = assets.boss_frames[self.kind][f_idx]
         if self.facing == 1:
             spr = pygame.transform.flip(spr, True, False)
         if self.state == "stagger":
